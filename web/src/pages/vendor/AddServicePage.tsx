@@ -1,7 +1,6 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { salons } from '../../lib/mockData'
-import { createVendorService } from '../../lib/api'
+import { createVendorService, loadVendorBusinessProfile } from '../../lib/api'
 import { formatINR } from '../../lib/format'
 import { useAuth } from '../../lib/auth'
 
@@ -26,7 +25,10 @@ export function AddServicePage() {
   const { user } = useAuth()
   const navigate = useNavigate()
   const [name, setName] = useState('')
-  const [salonId, setSalonId] = useState(salons[0]?.id ?? '')
+  const [description, setDescription] = useState('')
+  const [businessId, setBusinessId] = useState('')
+  const [businessName, setBusinessName] = useState('')
+  const [profileLoading, setProfileLoading] = useState(true)
   const [price, setPrice] = useState('')
   const [durationMin, setDurationMin] = useState('')
   const [category, setCategory] = useState<'popular' | 'other'>('popular')
@@ -35,6 +37,27 @@ export function AddServicePage() {
   const [imagePreview, setImagePreview] = useState('')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    let active = true
+    void loadVendorBusinessProfile()
+      .then((profile) => {
+        if (active) {
+          setBusinessName(profile.businessName)
+          setBusinessId(profile.id)
+        }
+      })
+      .catch((err: unknown) => {
+        console.error('Could not load business profile before adding service:', err)
+        if (active) setError(err instanceof Error ? err.message : 'Save your business details before adding services.')
+      })
+      .finally(() => {
+        if (active) setProfileLoading(false)
+      })
+    return () => {
+      active = false
+    }
+  }, [])
 
   function onImageChange(file?: File) {
     setError('')
@@ -62,6 +85,10 @@ export function AddServicePage() {
       setError('Sign in to a business account to save services.')
       return
     }
+    if (!businessName.trim()) {
+      setError('Save your business name and store location before adding services.')
+      return
+    }
     if (!imageFile) {
       setError('A service image is required.')
       return
@@ -71,8 +98,9 @@ export function AddServicePage() {
     try {
       const imageUrl = await readImage(imageFile)
       await createVendorService({
-        salonId,
+        salonId: businessId,
         name,
+        description,
         price: Number(price),
         durationMin: Number(durationMin),
         category,
@@ -105,19 +133,22 @@ export function AddServicePage() {
           style={{ marginBottom: 12 }}
         />
 
-        <label htmlFor="service-salon">Salon</label>
-        <select
-          id="service-salon"
+        <p style={{ color: 'var(--may5-muted)' }}>
+          Listing under: <strong>{profileLoading ? 'Loading business profile…' : businessName || 'Business details not set'}</strong>
+          {!profileLoading && !businessName && <> · <Link to="/vendor/settings">Complete your business profile</Link></>}
+        </p>
+
+        <label htmlFor="service-description">Service details</label>
+        <textarea
+          id="service-description"
           className="may5-input"
-          value={salonId}
-          onChange={(event) => setSalonId(event.target.value)}
-          required
+          value={description}
+          onChange={(event) => setDescription(event.target.value)}
+          maxLength={500}
+          rows={3}
           style={{ marginBottom: 12 }}
-        >
-          {salons.map((salon) => (
-            <option key={salon.id} value={salon.id}>{salon.name}</option>
-          ))}
-        </select>
+          placeholder="Describe what's included in this service"
+        />
 
         <label htmlFor="service-price">Price (INR)</label>
         <input
@@ -187,7 +218,7 @@ export function AddServicePage() {
         )}
 
         {error && <p role="alert" style={{ color: 'var(--may5-danger)' }}>{error}</p>}
-        <button type="submit" className="may5-btn may5-btn-primary" disabled={saving || !imageFile}>
+        <button type="submit" className="may5-btn may5-btn-primary" disabled={saving || profileLoading || !businessName || !businessId || !imageFile}>
           {saving ? 'Saving…' : 'Save service'}
         </button>
         <Link to="/vendor/services" style={{ marginLeft: 12 }}>Cancel</Link>
