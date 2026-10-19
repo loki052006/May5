@@ -22,7 +22,7 @@ export function AdminLayout() {
     <div className="may5-sidebar-layout">
       <aside className="may5-sidebar">
         <div className="may5-sidebar-brand">
-          <img src="/may5-logo.svg" alt="MAY5" className="may5-logo" />
+          <img src="/may5-brand.png" alt="MAY5 — Sign your style" className="may5-logo" />
         </div>
         {links.map(({ to, label, icon: Icon }) => (
           <NavLink key={to} to={to} className={({ isActive }) => (isActive ? 'active' : '')}>
@@ -43,7 +43,7 @@ export function AdminLayout() {
       </aside>
       <main className="may5-main-panel">
         <header style={{ marginBottom: 20 }}>
-          <img src="/may5-logo.svg" alt="MAY5" className="may5-logo" />
+          <img src="/may5-brand.png" alt="MAY5 — Sign your style" className="may5-logo" />
         </header>
         <Outlet />
       </main>

@@ -1,5 +1,6 @@
 import { NavLink, Outlet } from 'react-router-dom'
 import { Calendar, Home, Search, User } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 
 export function CustomerLayout() {
@@ -7,6 +8,9 @@ export function CustomerLayout() {
 
   return (
     <div className="may5-mobile-shell">
+      <Link to="/customer/home" aria-label="MAY5 home" className="may5-mobile-brand">
+        <img src="/may5-brand.png" alt="MAY5 — Sign your style" className="may5-logo" />
+      </Link>
       <Outlet context={{ user }} />
       <nav className="may5-bottom-nav" aria-label="Customer">
         <NavLink to="/customer/home" className={({ isActive }) => (isActive ? 'active' : '')}>
