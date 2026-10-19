@@ -1,13 +1,15 @@
 import { useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { services, salons, staff } from '../../lib/mockData'
+import { staff } from '../../lib/mockData'
 import { store, getState } from '../../lib/store'
 import { useAuth } from '../../lib/auth'
 import { createGoogleBooking } from '../../lib/api'
 import type { PaymentMode } from '../../lib/types'
+import { usePublicCatalog } from '../../lib/usePublicCatalog'
 
 export function NewBookingPage() {
   const { serviceId } = useParams()
+  const { services, salons, loading } = usePublicCatalog()
   const svc = services.find((s) => s.id === serviceId)
   const salon = salons.find((s) => s.id === svc?.salonId)
   const { user } = useAuth()
@@ -19,7 +21,7 @@ export function NewBookingPage() {
   const [saving, setSaving] = useState(false)
   const pref = getState().bookingLocationPref
 
-  if (!svc || !salon) return <p className="may5-page-pad">Service not found</p>
+  if (!svc || !salon) return <p className="may5-page-pad" role="status">{loading ? 'Loading service…' : 'Service not found'}</p>
 
   const service = svc
   const salonRef = salon
