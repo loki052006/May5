@@ -31,6 +31,7 @@ let sessions
 let bookings
 let vendorServices
 let vendorStaff
+let vendorBranches
 
 app.use(cors({ origin: true }))
 app.use(express.json({ limit: '8mb' }))
@@ -104,7 +105,8 @@ async function createUserSession(user, res) {
 }
 
 app.post('/api/auth/demo-otp', async (req, res) => {
-  const { phone, code } = req.body ?? {}
+  const { phone, code, fullName } = req.body ?? {}
+  const normalizedName = typeof fullName === 'string' ? fullName.trim() : ''
   const digits = typeof phone === 'string' ? phone.replace(/\D/g, '') : ''
   const nationalNumber = digits.length === 12 && digits.startsWith('91')
     ? digits.slice(2)
@@ -112,6 +114,10 @@ app.post('/api/auth/demo-otp', async (req, res) => {
 
   if (!/^[6-9]\d{9}$/.test(nationalNumber) || code !== '123456') {
     res.status(401).json({ error: 'Invalid Indian mobile number or demo OTP' })
+    return
+  }
+  if (!normalizedName || normalizedName.length > 80) {
+    res.status(400).json({ error: 'Enter a name of 1 to 80 characters' })
     return
   }
 
@@ -123,11 +129,11 @@ app.post('/api/auth/demo-otp', async (req, res) => {
       {
         $set: {
           phone: normalizedPhone,
+          fullName: normalizedName,
           authProvider: 'demo',
           updatedAt: new Date(),
         },
         $setOnInsert: {
-          fullName: 'MAY5 User',
           email: '',
           role: 'customer',
           createdAt: new Date(),
@@ -171,7 +177,7 @@ app.post('/api/auth/google', async (req, res) => {
     googleUser = {
       googleId: payload.sub,
       email: payload.email ?? '',
-      fullName: payload.name ?? payload.email ?? 'Google user',
+      fullName: payload.name ?? payload.email?.split('@')[0] ?? 'Google user',
       avatarUrl: payload.picture ?? '',
     }
   } catch (err) {
@@ -296,9 +302,13 @@ app.patch('/api/profile', async (req, res) => {
   if (avatarUrl !== undefined) {
     if (
       avatarUrl !== null &&
-      (typeof avatarUrl !== 'string' || avatarUrl.length > 2048 || !/^https?:\/\//i.test(avatarUrl))
+      (
+        typeof avatarUrl !== 'string' ||
+        avatarUrl.length > 2_800_000 ||
+        (!/^https?:\/\//i.test(avatarUrl) && !/^data:image\/(?:jpeg|png|webp);base64,[a-z\d+/]+=*$/i.test(avatarUrl))
+      )
     ) {
-      res.status(400).json({ error: 'Avatar must be an HTTP or HTTPS URL' })
+      res.status(400).json({ error: 'Avatar must be a supported image or HTTP(S) URL' })
       return
     }
     fields.avatarUrl = avatarUrl
@@ -769,6 +779,133 @@ app.delete('/api/vendor/staff/:id', async (req, res) => {
   }
 })
 
+app.get('/api/vendor/branches', async (req, res) => {
+  try {
+    const user = await authenticatedUser(req)
+    if (!user) {
+      res.status(401).json({ error: 'Authentication required' })
+      return
+    }
+    if (user.role !== 'vendor') {
+      res.status(403).json({ error: 'Business account required' })
+      return
+    }
+    const records = await vendorBranches
+      .find({ vendorId: user.googleId })
+      .sort({ createdAt: 1 })
+      .toArray()
+    res.json(records.map(({ _id, vendorId: _vendorId, createdAt: _createdAt, updatedAt: _updatedAt, ...branch }) => ({
+      ...branch,
+      id: _id.toString(),
+    })))
+  } catch (err) {
+    console.error('Could not load vendor branches:', err)
+    res.status(500).json({ error: 'Could not load stores' })
+  }
+})
+
+app.post('/api/vendor/branches', async (req, res) => {
+  try {
+    const user = await authenticatedUser(req)
+    if (!user) {
+      res.status(401).json({ error: 'Authentication required' })
+      return
+    }
+    if (user.role !== 'vendor') {
+      res.status(403).json({ error: 'Business account required' })
+      return
+    }
+
+    const { name, address, seatCapacity, serviceCapacityPerHour } = req.body ?? {}
+    if (
+      typeof name !== 'string' || !name.trim() || name.trim().length > 80 ||
+      typeof address !== 'string' || !address.trim() || address.trim().length > 200 ||
+      !Number.isInteger(seatCapacity) || seatCapacity < 1 || seatCapacity > 500 ||
+      !Number.isInteger(serviceCapacityPerHour) || serviceCapacityPerHour < 1 || serviceCapacityPerHour > 500
+    ) {
+      res.status(400).json({ error: 'Enter a store name, address, and valid capacity values' })
+      return
+    }
+
+    const branch = {
+      vendorId: user.googleId,
+      name: name.trim(),
+      address: address.trim(),
+      seatCapacity,
+      serviceCapacityPerHour,
+      createdAt: new Date(),
+    }
+    const result = await vendorBranches.insertOne(branch)
+    res.status(201).json({ ...branch, id: result.insertedId.toString() })
+  } catch (err) {
+    console.error('Could not create vendor branch:', err)
+    res.status(500).json({ error: 'Could not add store' })
+  }
+})
+
+app.patch('/api/vendor/branches/:id', async (req, res) => {
+  try {
+    const user = await authenticatedUser(req)
+    if (!user) {
+      res.status(401).json({ error: 'Authentication required' })
+      return
+    }
+    if (user.role !== 'vendor') {
+      res.status(403).json({ error: 'Business account required' })
+      return
+    }
+    if (!ObjectId.isValid(req.params.id)) {
+      res.status(400).json({ error: 'Invalid store ID' })
+      return
+    }
+
+    const patch = req.body ?? {}
+    const fields = {}
+    if (patch.name !== undefined) {
+      if (typeof patch.name !== 'string' || !patch.name.trim() || patch.name.trim().length > 80) {
+        res.status(400).json({ error: 'Store name must be between 1 and 80 characters' })
+        return
+      }
+      fields.name = patch.name.trim()
+    }
+    if (patch.address !== undefined) {
+      if (typeof patch.address !== 'string' || !patch.address.trim() || patch.address.trim().length > 200) {
+        res.status(400).json({ error: 'Store address must be between 1 and 200 characters' })
+        return
+      }
+      fields.address = patch.address.trim()
+    }
+    for (const key of ['seatCapacity', 'serviceCapacityPerHour']) {
+      if (patch[key] !== undefined) {
+        if (!Number.isInteger(patch[key]) || patch[key] < 1 || patch[key] > 500) {
+          res.status(400).json({ error: 'Capacity must be a whole number between 1 and 500' })
+          return
+        }
+        fields[key] = patch[key]
+      }
+    }
+    if (!Object.keys(fields).length) {
+      res.status(400).json({ error: 'No store changes provided' })
+      return
+    }
+
+    const updated = await vendorBranches.findOneAndUpdate(
+      { _id: new ObjectId(req.params.id), vendorId: user.googleId },
+      { $set: { ...fields, updatedAt: new Date() } },
+      { returnDocument: 'after' },
+    )
+    if (!updated) {
+      res.status(404).json({ error: 'Store not found' })
+      return
+    }
+    const { _id, vendorId: _vendorId, createdAt: _createdAt, updatedAt: _updatedAt, ...branch } = updated
+    res.json({ ...branch, id: _id.toString() })
+  } catch (err) {
+    console.error('Could not update vendor branch:', err)
+    res.status(500).json({ error: 'Could not update store' })
+  }
+})
+
 app.get('/api/health', async (_req, res) => {
   try {
     await mongoClient.db('may5').command({ ping: 1 })
@@ -799,12 +936,14 @@ async function start() {
     bookings = database.collection('bookings')
     vendorServices = database.collection('vendorServices')
     vendorStaff = database.collection('vendorStaff')
+    vendorBranches = database.collection('vendorBranches')
     await users.createIndex({ googleId: 1 }, { unique: true })
     await sessions.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 })
     await sessions.createIndex({ userId: 1 })
     await bookings.createIndex({ customerId: 1, scheduledAt: -1 })
     await vendorServices.createIndex({ vendorId: 1, createdAt: -1 })
     await vendorStaff.createIndex({ vendorId: 1, createdAt: -1 })
+    await vendorBranches.createIndex({ vendorId: 1, createdAt: 1 })
 
     app.listen(port, '0.0.0.0', () => {
       console.log(`MAY5 server with MongoDB listening on port ${port}`)
