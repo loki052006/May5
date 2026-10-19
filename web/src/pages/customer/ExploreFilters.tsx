@@ -54,7 +54,7 @@ export function ExploreFilters({
           {(
             [
               ['specialOffers', 'Special Offers'],
-              ['homeService', 'Mobile Service'],
+              ['homeService', 'Home Service'],
               ['onlineServices', 'Online Services'],
             ] as const
           ).map(([key, label]) => (

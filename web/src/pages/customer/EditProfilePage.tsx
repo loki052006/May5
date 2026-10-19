@@ -11,8 +11,30 @@ export function EditProfilePage() {
   const [phone, setPhone] = useState(user?.phone ?? '')
   const [age, setAge] = useState(String(user?.age ?? ''))
   const [gender, setGender] = useState(user?.gender ?? '')
+  const [avatarUrl, setAvatarUrl] = useState(user?.avatarUrl ?? '')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+
+  async function onPhotoChange(file?: File) {
+    if (!file) return
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setError('Choose a JPG, PNG, or WebP photo.')
+      return
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      setError('Choose a photo smaller than 2 MB.')
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        setAvatarUrl(reader.result)
+        setError('')
+      }
+    }
+    reader.onerror = () => setError('Could not read the selected photo.')
+    reader.readAsDataURL(file)
+  }
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
@@ -23,6 +45,7 @@ export function EditProfilePage() {
       phone: phone.trim(),
       age: age ? Number(age) : undefined,
       gender: gender || undefined,
+      avatarUrl: avatarUrl || null,
     }
     try {
       if (user?.authProvider === 'google' || user?.authProvider === 'demo') {
@@ -42,6 +65,24 @@ export function EditProfilePage() {
     <div className="may5-page-pad">
       <h1>Edit profile</h1>
       <form onSubmit={onSubmit}>
+        <label htmlFor="profile-photo">Profile photo</label>
+        <input
+          id="profile-photo"
+          className="may5-input"
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          capture="user"
+          onChange={(event) => void onPhotoChange(event.target.files?.[0])}
+          style={{ margin: '8px 0 12px', padding: 8 }}
+        />
+        {avatarUrl && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+            <img src={avatarUrl} alt="Selected profile" style={{ width: 64, height: 64, borderRadius: '50%', objectFit: 'cover' }} />
+            <button type="button" className="may5-btn may5-btn-secondary" onClick={() => setAvatarUrl('')}>
+              Remove photo
+            </button>
+          </div>
+        )}
         <label>Name</label>
         <input className="may5-input" value={fullName} onChange={(e) => setFullName(e.target.value)} style={{ marginBottom: 12 }} />
         <label htmlFor="profile-phone">Mobile number</label>
@@ -58,8 +99,8 @@ export function EditProfilePage() {
         <p style={{ marginTop: -8, color: 'var(--may5-muted)', fontSize: '0.8rem' }}>
           Use a 10-digit Indian mobile number. Leave blank if you prefer not to share it.
         </p>
-        <label>Age</label>
-        <input className="may5-input" type="number" min={13} value={age} onChange={(e) => setAge(e.target.value)} style={{ marginBottom: 12 }} />
+        <label htmlFor="profile-age">Age</label>
+        <input id="profile-age" className="may5-input" type="number" min={13} max={120} value={age} onChange={(e) => setAge(e.target.value)} style={{ marginBottom: 12 }} />
         <label>Gender</label>
         <select className="may5-input" value={gender} onChange={(e) => setGender(e.target.value)} style={{ marginBottom: 16 }}>
           <option value="">Prefer not to say</option>
