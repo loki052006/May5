@@ -12,8 +12,8 @@ const options: { role: UserRole; title: string; desc: string; path: string }[] =
   {
     role: 'vendor',
     title: 'Business',
-    desc: 'List your salon and manage bookings, staff, and services.',
-    path: '/vendor/dashboard',
+    desc: 'Set up your store details, publish your services, and manage your business.',
+    path: '/vendor/settings',
   },
   {
     role: 'admin',
