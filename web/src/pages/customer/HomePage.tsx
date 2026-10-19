@@ -1,14 +1,16 @@
 import { Link } from 'react-router-dom'
 import { Menu, Search } from 'lucide-react'
 import { useAuth } from '../../lib/auth'
-import { salons, serviceCategories, specialOffers, staff } from '../../lib/mockData'
+import { serviceCategories, specialOffers, staff } from '../../lib/mockData'
 import { getState, store, subscribe } from '../../lib/store'
 import { useEffect, useState } from 'react'
+import { usePublicCatalog } from '../../lib/usePublicCatalog'
 
 export function CustomerHomePage() {
   const { user } = useAuth()
   const [, tick] = useState(0)
   const name = user?.fullName ?? 'Guest'
+  const { salons, services } = usePublicCatalog()
   useEffect(() => subscribe(() => tick((n) => n + 1)), [])
   const followed = getState().followedVideos
 
@@ -103,15 +105,19 @@ export function CustomerHomePage() {
 
         <section style={{ marginTop: 24 }}>
           <h2 style={{ fontSize: '1.1rem' }}>Near you</h2>
-          {salons.slice(0, 2).map((salon) => (
+          {salons.slice(0, 5).map((salon) => (
             <Link key={salon.id} to={`/salon/${salon.id}`} className="may5-card" style={{ display: 'block', marginTop: 12, overflow: 'hidden' }}>
               <img src={salon.coverImage} alt="" loading="lazy" decoding="async" style={{ width: '100%', height: 140, objectFit: 'cover' }} />
               <div style={{ padding: 12 }}>
                 {salon.promo && <span className="may5-tag">{salon.promo}</span>}
                 <h3 style={{ margin: '8px 0 4px' }}>{salon.name}</h3>
                 <p style={{ margin: 0, color: 'var(--may5-muted)', fontSize: '0.85rem' }}>
-                  {salon.address} · ★ {salon.rating}
+                  {salon.address} · {salon.rating > 0 ? `★ ${salon.rating}` : 'New on MAY5'}
                 </p>
+                <p style={{ margin: '6px 0 0', color: 'var(--may5-muted)', fontSize: '0.82rem' }}>
+                  {salon.businessType ?? (salon.demoListing ? 'Sample business' : 'Salon')} · {services.filter((service) => service.salonId === salon.id).length} services
+                </p>
+                {salon.demoListing && <span className="may5-tag" style={{ marginTop: 8, display: 'inline-block' }}>Sample listing</span>}
               </div>
             </Link>
           ))}

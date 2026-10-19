@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { getState, store, subscribe } from '../../lib/store'
-import { salons, services, staff } from '../../lib/mockData'
+import { staff } from '../../lib/mockData'
+import { usePublicCatalog } from '../../lib/usePublicCatalog'
 
 function isVideo(url: string) {
   return /^data:video\//i.test(url) || /\.(mp4|webm|mov)(?:$|[?#])/i.test(url)
@@ -9,6 +10,7 @@ function isVideo(url: string) {
 
 export function HistoryPage() {
   const [, tick] = useState(0)
+  const { salons, services } = usePublicCatalog()
   useEffect(() => subscribe(() => tick((n) => n + 1)), [])
 
   const completed = getState().bookings.filter((b) => b.mediaAuthorized)

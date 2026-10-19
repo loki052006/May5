@@ -1,12 +1,26 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import {
   createVendorBranch,
+  loadVendorBusinessProfile,
   loadVendorBranches,
+  saveVendorBusinessProfile,
   updateVendorBranch,
 } from '../../lib/api'
 import { getState, store, subscribe } from '../../lib/store'
-import type { Branch } from '../../lib/types'
+import type { Branch, VendorBusinessProfile } from '../../lib/types'
 import { useAuth } from '../../lib/auth'
+
+const emptyProfile: VendorBusinessProfile = {
+  id: '',
+  businessName: '',
+  businessType: '',
+  description: '',
+  address: '',
+  phone: '',
+  email: '',
+  website: '',
+  openingHours: '',
+}
 
 export function VendorSettingsPage() {
   const { user } = useAuth()
@@ -23,7 +37,31 @@ export function VendorSettingsPage() {
   const [newAddress, setNewAddress] = useState('')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+  const [profile, setProfile] = useState<VendorBusinessProfile>(emptyProfile)
+  const [profileLoading, setProfileLoading] = useState(remote)
+  const [profileSaving, setProfileSaving] = useState(false)
+  const [profileError, setProfileError] = useState('')
+  const [profileSaved, setProfileSaved] = useState(false)
   const branch = branches.find((item) => item.id === branchId)
+
+  useEffect(() => {
+    if (!remote) return
+    let active = true
+    void loadVendorBusinessProfile()
+      .then((item) => {
+        if (active) setProfile(item)
+      })
+      .catch((err: unknown) => {
+        console.error('Could not load business details:', err)
+        if (active) setProfileError(err instanceof Error ? err.message : 'Could not load business details.')
+      })
+      .finally(() => {
+        if (active) setProfileLoading(false)
+      })
+    return () => {
+      active = false
+    }
+  }, [remote])
 
   useEffect(() => {
     if (!remote) return
@@ -126,9 +164,66 @@ export function VendorSettingsPage() {
     }
   }
 
+  async function saveProfile(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setProfileError('')
+    setProfileSaved(false)
+    setProfileSaving(true)
+    try {
+      const saved = remote
+        ? await saveVendorBusinessProfile(profile)
+        : profile
+      setProfile(saved)
+      setProfileSaved(true)
+    } catch (err) {
+      setProfileError(err instanceof Error ? err.message : 'Could not save business details.')
+    } finally {
+      setProfileSaving(false)
+    }
+  }
+
   return (
     <>
       <h1>Settings</h1>
+      <section className="may5-card" style={{ padding: 16, marginTop: 16 }}>
+        <h2>Business profile</h2>
+        <p style={{ color: 'var(--may5-muted)' }}>
+          These verified-by-you details and your service menu are shown to customers on your MAY5 listing.
+        </p>
+        {profileLoading ? <p role="status">Loading business details…</p> : (
+          <form onSubmit={saveProfile} style={{ display: 'grid', gap: 10 }}>
+            <label htmlFor="business-name">Business / store name</label>
+            <input id="business-name" className="may5-input" value={profile.businessName} onChange={(event) => setProfile({ ...profile, businessName: event.target.value })} maxLength={100} required />
+            <label htmlFor="business-type">Business type</label>
+            <select id="business-type" className="may5-input" value={profile.businessType} onChange={(event) => setProfile({ ...profile, businessType: event.target.value })} required>
+              <option value="">Choose a business type</option>
+              <option>Hair salon</option>
+              <option>Beauty parlour</option>
+              <option>Spa & wellness</option>
+              <option>Nail studio</option>
+              <option>Barber shop</option>
+              <option>Other beauty business</option>
+            </select>
+            <label htmlFor="business-address">Store location / full address</label>
+            <input id="business-address" className="may5-input" value={profile.address} onChange={(event) => setProfile({ ...profile, address: event.target.value })} maxLength={240} required />
+            <label htmlFor="business-description">About your store and services</label>
+            <textarea id="business-description" className="may5-input" value={profile.description} onChange={(event) => setProfile({ ...profile, description: event.target.value })} maxLength={800} rows={4} />
+            <label htmlFor="business-phone">Business phone</label>
+            <input id="business-phone" className="may5-input" type="tel" value={profile.phone} onChange={(event) => setProfile({ ...profile, phone: event.target.value })} maxLength={24} />
+            <label htmlFor="business-email">Business email</label>
+            <input id="business-email" className="may5-input" type="email" value={profile.email} onChange={(event) => setProfile({ ...profile, email: event.target.value })} maxLength={240} />
+            <label htmlFor="business-website">Website (optional)</label>
+            <input id="business-website" className="may5-input" type="url" value={profile.website} onChange={(event) => setProfile({ ...profile, website: event.target.value })} placeholder="https://example.com" maxLength={240} />
+            <label htmlFor="business-hours">Opening hours</label>
+            <input id="business-hours" className="may5-input" value={profile.openingHours} onChange={(event) => setProfile({ ...profile, openingHours: event.target.value })} placeholder="Mon–Sat, 10:00 AM–8:00 PM" maxLength={240} />
+            {profileError && <p role="alert" style={{ color: 'var(--may5-danger)', margin: 0 }}>{profileError}</p>}
+            {profileSaved && <p role="status" style={{ color: 'var(--may5-success)', margin: 0 }}>Business details saved. Your listing is visible to customers.</p>}
+            <button type="submit" className="may5-btn may5-btn-primary" disabled={profileSaving}>
+              {profileSaving ? 'Saving…' : 'Save business profile'}
+            </button>
+          </form>
+        )}
+      </section>
       <section className="may5-card" style={{ padding: 16, marginTop: 16 }}>
         <h2>Multi-store management</h2>
         {branches.length > 0 && (

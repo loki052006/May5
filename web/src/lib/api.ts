@@ -1,4 +1,4 @@
-import type { Booking, Branch, ServiceItem, UserProfile, UserRole, VendorStaff } from './types'
+import type { Booking, Branch, Salon, ServiceItem, UserProfile, UserRole, VendorBusinessProfile, VendorStaff } from './types'
 
 export class ApiError extends Error {
   readonly status: number
@@ -96,8 +96,30 @@ export function createGoogleBooking(
 
 export type VendorService = ServiceItem & { id: string }
 
+export interface PublicCatalog {
+  salons: Salon[]
+  services: ServiceItem[]
+}
+
+export function loadPublicCatalog(): Promise<PublicCatalog> {
+  return request<PublicCatalog>('/api/catalog')
+}
+
 export function loadVendorServices(): Promise<VendorService[]> {
   return request<VendorService[]>('/api/vendor/services')
+}
+
+export function loadVendorBusinessProfile(): Promise<VendorBusinessProfile> {
+  return request<VendorBusinessProfile>('/api/vendor/profile')
+}
+
+export function saveVendorBusinessProfile(
+  profile: VendorBusinessProfile,
+): Promise<VendorBusinessProfile> {
+  return request<VendorBusinessProfile>('/api/vendor/profile', {
+    method: 'PATCH',
+    body: JSON.stringify(profile),
+  })
 }
 
 export function createVendorService(

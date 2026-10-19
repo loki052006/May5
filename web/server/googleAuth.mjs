@@ -33,6 +33,26 @@ let vendorServices
 let vendorStaff
 let vendorBranches
 
+const emptyBusinessProfile = {
+  businessName: '',
+  businessType: '',
+  description: '',
+  address: '',
+  phone: '',
+  email: '',
+  website: '',
+  openingHours: '',
+}
+
+function toBusinessProfile(user) {
+  return Object.fromEntries(
+    [
+      ['id', user.businessId ?? ''],
+      ...Object.keys(emptyBusinessProfile).map((key) => [key, user[key] ?? '']),
+    ],
+  )
+}
+
 app.use(cors({ origin: true }))
 app.use(express.json({ limit: '8mb' }))
 
@@ -462,6 +482,156 @@ app.post('/api/bookings', async (req, res) => {
   }
 })
 
+app.get('/api/catalog', async (_req, res) => {
+  try {
+    const records = await users
+      .find({
+        role: 'vendor',
+        businessId: { $type: 'string', $ne: '' },
+        businessName: { $type: 'string', $ne: '' },
+        address: { $type: 'string', $ne: '' },
+      })
+      .project({
+        googleId: 1,
+        businessId: 1,
+        businessName: 1,
+        businessType: 1,
+        description: 1,
+        address: 1,
+        phone: 1,
+        email: 1,
+        website: 1,
+        openingHours: 1,
+      })
+      .toArray()
+    if (records.length === 0) {
+      res.json({ salons: [], services: [] })
+      return
+    }
+
+    const vendors = new Map(records.map((record) => [record.googleId, record]))
+    const serviceRecords = await vendorServices
+      .find({ vendorId: { $in: [...vendors.keys()] } })
+      .sort({ createdAt: -1 })
+      .toArray()
+    const services = serviceRecords.map(({ _id, vendorId, createdAt: _createdAt, ...service }) => ({
+      ...service,
+      id: _id.toString(),
+      salonId: vendors.get(vendorId).businessId,
+    }))
+    const servicesByVendor = new Map()
+    for (const service of services) {
+      servicesByVendor.set(service.salonId, [...(servicesByVendor.get(service.salonId) ?? []), service])
+    }
+    const salons = records.map((record, index) => {
+      const vendorServices = servicesByVendor.get(record.businessId) ?? []
+      const categoryImage = record.businessType === 'Spa & wellness'
+        ? 'https://images.unsplash.com/photo-1540555700478-4be289fbecef?w=800&q=80'
+        : 'https://images.unsplash.com/photo-1560066984-138dadb4c035?w=800&q=80'
+      return {
+        id: record.businessId,
+        name: record.businessName,
+        address: record.address,
+        rating: 0,
+        coverImage: categoryImage,
+        homeService: vendorServices.some((service) => service.homeService),
+        onlineServices: vendorServices.length > 0,
+        lat: 0,
+        lng: 0,
+        businessType: record.businessType,
+        description: record.description,
+        phone: record.phone,
+        email: record.email,
+        website: record.website,
+        openingHours: record.openingHours,
+        branchId: `vendor-${index}`,
+      }
+    })
+    res.json({ salons, services })
+  } catch (err) {
+    console.error('MongoDB public catalog lookup failed:', err)
+    res.status(500).json({ error: 'Could not load business listings' })
+  }
+})
+
+app.get('/api/vendor/profile', async (req, res) => {
+  try {
+    const user = await authenticatedUser(req)
+    if (!user) {
+      res.status(401).json({ error: 'Authentication required' })
+      return
+    }
+    if (user.role !== 'vendor') {
+      res.status(403).json({ error: 'Business account required' })
+      return
+    }
+    res.json(toBusinessProfile(user))
+  } catch (err) {
+    console.error('Could not load vendor business profile:', err)
+    res.status(500).json({ error: 'Could not load business profile' })
+  }
+})
+
+app.patch('/api/vendor/profile', async (req, res) => {
+  try {
+    const user = await authenticatedUser(req)
+    if (!user) {
+      res.status(401).json({ error: 'Authentication required' })
+      return
+    }
+    if (user.role !== 'vendor') {
+      res.status(403).json({ error: 'Business account required' })
+      return
+    }
+
+    const profile = req.body ?? {}
+    const fields = {}
+    const required = ['businessName', 'businessType', 'address']
+    for (const key of Object.keys(emptyBusinessProfile)) {
+      const value = profile[key]
+      if (value === undefined) continue
+      if (typeof value !== 'string' || value.trim().length > (key === 'description' ? 800 : 240)) {
+        res.status(400).json({ error: `Enter valid ${key.replace(/[A-Z]/g, (letter) => ` ${letter.toLowerCase()}`)}` })
+        return
+      }
+      const normalized = value.trim()
+      if (required.includes(key) && !normalized) {
+        res.status(400).json({ error: `Business ${key} is required` })
+        return
+      }
+      fields[key] = normalized
+    }
+    if (fields.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(fields.email)) {
+      res.status(400).json({ error: 'Enter a valid business email address' })
+      return
+    }
+    if (fields.phone && !/^[+\d\s().-]{7,24}$/.test(fields.phone)) {
+      res.status(400).json({ error: 'Enter a valid business phone number' })
+      return
+    }
+    if (fields.website && !/^https?:\/\/[^\s/$.?#].[^\s]*$/i.test(fields.website)) {
+      res.status(400).json({ error: 'Website must start with http:// or https://' })
+      return
+    }
+    if (!Object.keys(fields).length) {
+      res.status(400).json({ error: 'No business profile details provided' })
+      return
+    }
+
+    fields.businessId = user.businessId ?? randomBytes(12).toString('hex')
+    const updated = await users.findOneAndUpdate(
+      { googleId: user.googleId },
+      { $set: { ...fields, updatedAt: new Date() } },
+      { returnDocument: 'after' },
+    )
+    if (!updated) throw new Error('Vendor profile update returned no user')
+    res.json(toBusinessProfile(updated))
+  } catch (err) {
+    console.error('Could not update vendor business profile:', err)
+    res.status(500).json({ error: 'Could not save business profile' })
+  }
+})
+
 app.get('/api/vendor/services', async (req, res) => {
   try {
     const user = await authenticatedUser(req)
@@ -503,15 +673,18 @@ app.post('/api/vendor/services', async (req, res) => {
     return
   }
 
-  const { salonId, name, price, durationMin, category, homeService, imageData } =
+  const { salonId, name, description = '', price, durationMin, category, homeService, imageData } =
     req.body ?? {}
   if (
+    !user.businessId ||
     typeof salonId !== 'string' ||
     salonId.length === 0 ||
     salonId.length > 120 ||
     typeof name !== 'string' ||
     name.trim().length === 0 ||
     name.trim().length > 120 ||
+    typeof description !== 'string' ||
+    description.trim().length > 500 ||
     typeof price !== 'number' ||
     !Number.isFinite(price) ||
     price <= 0 ||
@@ -534,8 +707,9 @@ app.post('/api/vendor/services', async (req, res) => {
   }
 
   const service = {
-    salonId,
+    salonId: user.businessId,
     name: name.trim(),
+    description: description.trim(),
     price,
     durationMin,
     category,

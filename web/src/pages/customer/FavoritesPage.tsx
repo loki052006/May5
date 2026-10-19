@@ -1,10 +1,11 @@
 import { Link } from 'react-router-dom'
 import { useEffect, useState } from 'react'
-import { salons } from '../../lib/mockData'
 import { getState, subscribe } from '../../lib/store'
+import { usePublicCatalog } from '../../lib/usePublicCatalog'
 
 export function CustomerFavoritesPage() {
   const [, tick] = useState(0)
+  const { salons } = usePublicCatalog()
   useEffect(() => subscribe(() => tick((n) => n + 1)), [])
   const favs = salons.filter((s) => getState().favorites.includes(s.id))
 

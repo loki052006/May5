@@ -1,8 +1,9 @@
 import { Link } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
-import { salons } from '../../lib/mockData'
+import { usePublicCatalog } from '../../lib/usePublicCatalog'
 
 export function ExploreMapPage() {
+  const { salons } = usePublicCatalog()
   return (
     <>
       <header className="may5-header-mobile">

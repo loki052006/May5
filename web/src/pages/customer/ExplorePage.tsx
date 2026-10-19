@@ -2,10 +2,10 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Filter, Heart, Map, Search } from 'lucide-react'
 import { getState, subscribe } from '../../lib/store'
-import { salons } from '../../lib/mockData'
 import { useAuth } from '../../lib/auth'
 import { useEffect } from 'react'
 import { ExploreFilters } from './ExploreFilters'
+import { usePublicCatalog } from '../../lib/usePublicCatalog'
 
 export function CustomerExplorePage() {
   const [, tick] = useState(0)
@@ -13,6 +13,7 @@ export function CustomerExplorePage() {
   const [q, setQ] = useState('')
   const [favoriteError, setFavoriteError] = useState('')
   const { toggleFavorite } = useAuth()
+  const { salons, services, error: catalogError } = usePublicCatalog()
 
   useEffect(() => subscribe(() => tick((n) => n + 1)), [])
 
@@ -40,7 +41,7 @@ export function CustomerExplorePage() {
     if (filters.onlineServices) items = items.filter((s) => s.onlineServices)
     if (filters.sort === 'top_reviewed') items.sort((a, b) => b.rating - a.rating)
     return items
-  }, [q, filters])
+  }, [q, filters, salons])
 
   return (
     <>
@@ -53,6 +54,7 @@ export function CustomerExplorePage() {
       </header>
 
       <div className="may5-page-pad">
+        {catalogError && <p role="status" style={{ color: 'var(--may5-muted)' }}>{catalogError}</p>}
         {list.map((salon) => (
           <article key={salon.id} className="may5-card" style={{ marginBottom: 16, overflow: 'hidden', position: 'relative' }}>
             <button
@@ -83,8 +85,12 @@ export function CustomerExplorePage() {
                 {salon.promo && <span className="may5-tag">{salon.promo}</span>}
                 <h3 style={{ margin: '8px 0 4px' }}>{salon.name}</h3>
                 <p style={{ margin: 0, color: 'var(--may5-muted)', fontSize: '0.85rem' }}>
-                  {salon.address} · ★ {salon.rating}
+                  {salon.address} · {salon.rating > 0 ? `★ ${salon.rating}` : 'New on MAY5'}
                 </p>
+                <p style={{ margin: '6px 0 0', color: 'var(--may5-muted)', fontSize: '0.82rem' }}>
+                  {salon.businessType ?? (salon.demoListing ? 'Sample business' : 'Salon')} · {services.filter((service) => service.salonId === salon.id).length} services
+                </p>
+                {salon.demoListing && <span className="may5-tag" style={{ marginTop: 8, display: 'inline-block' }}>Sample listing</span>}
               </div>
             </Link>
           </article>
