@@ -1,17 +1,19 @@
-import { initialBookings } from './mockData'
-import type { Booking, SalonFilters, UserProfile } from './types'
+import { branches, initialBookings } from './mockData'
+import type { Booking, Branch, SalonFilters, UserProfile } from './types'
 
 const KEY = 'may5-web-state'
 
 export interface AppState {
   user: UserProfile | null
   pendingPhone: string
+  pendingUsername: string
   favorites: string[]
   bookings: Booking[]
   filters: SalonFilters
   adminGatePassed: boolean
   followedVideos: string[]
   bookingLocationPref: 'salon' | 'home'
+  vendorBranches: Branch[]
 }
 
 const defaultFilters: SalonFilters = {
@@ -25,19 +27,22 @@ const defaultFilters: SalonFilters = {
 const defaultState: AppState = {
   user: null,
   pendingPhone: '',
+  pendingUsername: '',
   favorites: [],
   bookings: initialBookings,
   filters: defaultFilters,
   adminGatePassed: false,
   followedVideos: [],
   bookingLocationPref: 'salon',
+  vendorBranches: branches,
 }
 
 function load(): AppState {
   try {
     const raw = localStorage.getItem(KEY)
     if (!raw) return { ...defaultState, bookings: [...initialBookings] }
-    return { ...defaultState, ...JSON.parse(raw) }
+    const saved = JSON.parse(raw) as Partial<AppState>
+    return { ...defaultState, ...saved, vendorBranches: saved.vendorBranches ?? branches }
   } catch {
     return { ...defaultState, bookings: [...initialBookings] }
   }
@@ -68,8 +73,8 @@ function setState(partial: Partial<AppState>) {
 }
 
 export const store = {
-  setPendingPhone(phone: string) {
-    setState({ pendingPhone: phone })
+  setPendingCredentials(phone: string, username: string) {
+    setState({ pendingPhone: phone, pendingUsername: username })
   },
   setUser(user: UserProfile | null) {
     setState({ user })
@@ -104,6 +109,21 @@ export const store = {
     else set.add(id)
     setState({ followedVideos: [...set] })
   },
+  addVendorBranch(branch: Omit<Branch, 'id' | 'vendorId'>) {
+    const created: Branch = {
+      ...branch,
+      id: `branch-${Date.now()}`,
+      vendorId: 'vendor-demo',
+    }
+    setState({ vendorBranches: [...state.vendorBranches, created] })
+  },
+  updateVendorBranch(id: string, patch: Partial<Pick<Branch, 'name' | 'address' | 'seatCapacity' | 'serviceCapacityPerHour'>>) {
+    setState({
+      vendorBranches: state.vendorBranches.map((branch) =>
+        branch.id === id ? { ...branch, ...patch } : branch,
+      ),
+    })
+  },
   setBookingLocationPref(pref: 'salon' | 'home') {
     setState({ bookingLocationPref: pref })
   },
@@ -116,6 +136,7 @@ export const store = {
       user: null,
       adminGatePassed: false,
       pendingPhone: '',
+      pendingUsername: '',
       bookings: [...initialBookings],
       favorites: [],
     })

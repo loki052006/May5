@@ -11,7 +11,7 @@ export interface UserProfile {
   role: UserRole
   age?: number
   gender?: string
-  avatarUrl?: string
+  avatarUrl?: string | null
   locationLabel?: string
 }
 
