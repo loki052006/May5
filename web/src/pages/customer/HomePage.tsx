@@ -2,10 +2,15 @@ import { Link } from 'react-router-dom'
 import { Menu, Search } from 'lucide-react'
 import { useAuth } from '../../lib/auth'
 import { salons, serviceCategories, specialOffers, staff } from '../../lib/mockData'
+import { getState, store, subscribe } from '../../lib/store'
+import { useEffect, useState } from 'react'
 
 export function CustomerHomePage() {
   const { user } = useAuth()
+  const [, tick] = useState(0)
   const name = user?.fullName ?? 'Guest'
+  useEffect(() => subscribe(() => tick((n) => n + 1)), [])
+  const followed = getState().followedVideos
 
   return (
     <>
@@ -33,6 +38,9 @@ export function CustomerHomePage() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h2 style={{ fontSize: '1.1rem', margin: 0 }}>My Master</h2>
           </div>
+          <p style={{ color: 'var(--may5-muted)', fontSize: '0.82rem', margin: '6px 0 0' }}>
+            Follow stylists to keep up with their latest videos.
+          </p>
           <div style={{ display: 'flex', gap: 16, overflowX: 'auto', paddingBottom: 8, marginTop: 12 }}>
             {staff.map((s) => (
               <div key={s.id} style={{ minWidth: 120, textAlign: 'center' }}>
@@ -45,6 +53,15 @@ export function CustomerHomePage() {
                 <Link to={`/salon/${s.salonId}`} className="may5-btn may5-btn-secondary" style={{ minHeight: 32, padding: '0 12px', fontSize: '0.7rem' }}>
                   BOOK NOW
                 </Link>
+                <button
+                  type="button"
+                  className="may5-btn may5-btn-ghost"
+                  style={{ display: 'flex', minHeight: 32, margin: '4px auto 0', padding: '0 12px', fontSize: '0.75rem' }}
+                  aria-pressed={followed.includes(s.id)}
+                  onClick={() => store.toggleVideoFollow(s.id)}
+                >
+                  {followed.includes(s.id) ? 'Following' : 'Follow'}
+                </button>
               </div>
             ))}
           </div>

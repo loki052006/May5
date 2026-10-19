@@ -1,12 +1,34 @@
-import { branches, services } from '../../lib/mockData'
+import { useEffect, useState } from 'react'
+import { services } from '../../lib/mockData'
 import { getState } from '../../lib/store'
 import { formatINR, formatIndianDateOnly } from '../../lib/format'
+import { loadVendorBranches } from '../../lib/api'
+import type { Branch } from '../../lib/types'
+import { useAuth } from '../../lib/auth'
 
 export function VendorDashboardPage() {
+  const { user } = useAuth()
+  const remote = user?.authProvider === 'google' || user?.authProvider === 'demo'
+  const [branches, setBranches] = useState<Branch[]>(() => remote ? [] : getState().vendorBranches)
+  const [branchError, setBranchError] = useState('')
+  useEffect(() => {
+    if (!remote) return
+    let active = true
+    void loadVendorBranches()
+      .then((items) => {
+        if (active) setBranches(items)
+      })
+      .catch((err: unknown) => {
+        console.error('Could not load store capacity overview:', err)
+        if (active) setBranchError(err instanceof Error ? err.message : 'Could not load store overview.')
+      })
+    return () => {
+      active = false
+    }
+  }, [remote])
   const bookings = getState().bookings
   const completed = bookings.filter((b) => b.status === 'completed').length
   const revenue = completed * 790
-  const branch = branches[0]
 
   return (
     <>
@@ -37,11 +59,14 @@ export function VendorDashboardPage() {
           <h3>Top services</h3>
           <p>#1 {services[3]?.name ?? 'Blowout'} — 2 appointments · {formatINR(1580)}</p>
         </div>
-        <div className="may5-card" style={{ padding: 16 }}>
-          <h3>Capacity ({branch.name})</h3>
-          <p>Seats: {branch.seatCapacity} · Services/hr: {branch.serviceCapacityPerHour}</p>
-        </div>
+        {branches.map((branch) => (
+          <div key={branch.id} className="may5-card" style={{ padding: 16 }}>
+            <h3>Capacity ({branch.name})</h3>
+            <p>Seats: {branch.seatCapacity} · Services/hr: {branch.serviceCapacityPerHour}</p>
+          </div>
+        ))}
       </div>
+      {branchError && <p role="alert" style={{ color: 'var(--may5-danger)' }}>{branchError}</p>}
     </>
   )
 }

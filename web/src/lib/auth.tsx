@@ -26,7 +26,7 @@ interface AuthContextValue {
   user: UserProfile | null
   loading: boolean
   adminGatePassed: boolean
-  sendOtp: (phone: string) => void
+  sendOtp: (phone: string, username: string) => void
   verifyOtp: (code: string) => Promise<boolean>
   signInWithGoogle: () => Promise<UserProfile>
   toggleFavorite: (salonId: string) => Promise<void>
@@ -85,12 +85,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user: s.user,
       loading,
       adminGatePassed: s.adminGatePassed,
-      sendOtp(phone: string) {
-        store.setPendingPhone(phone)
+      sendOtp(phone: string, username: string) {
+        store.setPendingCredentials(phone, username)
       },
       async verifyOtp(code: string) {
         if (code.trim() !== DEMO_OTP) return false
-        const user = await signInWithDemoOtp(getState().pendingPhone, code.trim())
+        const { pendingPhone, pendingUsername } = getState()
+        const user = await signInWithDemoOtp(pendingPhone, code.trim(), pendingUsername)
         store.setUser({
           ...user,
           locationLabel: 'Bengaluru, 28°C',

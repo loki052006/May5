@@ -4,6 +4,7 @@ import { GoogleIcon } from '../../components/GoogleIcon'
 import { useAuth } from '../../lib/auth'
 
 export function PhonePage() {
+  const [username, setUsername] = useState('')
   const [phone, setPhone] = useState('')
   const [error, setError] = useState('')
   const [googleLoading, setGoogleLoading] = useState(false)
@@ -12,6 +13,11 @@ export function PhonePage() {
 
   function onSubmit(e: FormEvent) {
     e.preventDefault()
+    const trimmedUsername = username.trim()
+    if (!trimmedUsername) {
+      setError('Enter your name to continue.')
+      return
+    }
     const digits = phone.replace(/\D/g, '')
     const nationalNumber = digits.length === 12 && digits.startsWith('91')
       ? digits.slice(2)
@@ -20,7 +26,7 @@ export function PhonePage() {
       setError('Enter a valid 10-digit Indian mobile number.')
       return
     }
-    sendOtp(`+91${nationalNumber}`)
+    sendOtp(`+91${nationalNumber}`, trimmedUsername)
     navigate('/auth/otp')
   }
 
@@ -39,7 +45,7 @@ export function PhonePage() {
 
   return (
     <div className="may5-page-pad" style={{ maxWidth: 420, paddingTop: 48 }}>
-      <img src="/may5-logo.svg" alt="MAY5" className="may5-logo" style={{ marginBottom: 24 }} />
+      <img src="/may5-brand.png" alt="MAY5 — Sign your style" className="may5-logo" style={{ marginBottom: 24 }} />
       <h1 style={{ margin: '0 0 8px', fontSize: '1.75rem' }}>Sign in</h1>
       <p style={{ color: 'var(--may5-muted)', marginBottom: 24 }}>
         Enter your phone number to sign in, or continue with Google.
@@ -71,6 +77,19 @@ export function PhonePage() {
       </div>
 
       <form onSubmit={onSubmit}>
+        <label htmlFor="username" style={{ display: 'block', marginBottom: 8, fontWeight: 600 }}>
+          Your name
+        </label>
+        <input
+          id="username"
+          className="may5-input"
+          placeholder="Enter your name"
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+          autoComplete="name"
+          maxLength={80}
+          required
+        />
         <label htmlFor="phone" style={{ display: 'block', marginBottom: 8, fontWeight: 600 }}>
           Mobile number
         </label>

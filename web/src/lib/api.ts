@@ -1,4 +1,4 @@
-import type { Booking, ServiceItem, UserProfile, UserRole, VendorStaff } from './types'
+import type { Booking, Branch, ServiceItem, UserProfile, UserRole, VendorStaff } from './types'
 
 export class ApiError extends Error {
   readonly status: number
@@ -33,10 +33,10 @@ export function loadGoogleSession(): Promise<UserProfile> {
   return request<UserProfile>('/api/auth/session')
 }
 
-export function signInWithDemoOtp(phone: string, code: string): Promise<UserProfile> {
+export function signInWithDemoOtp(phone: string, code: string, fullName: string): Promise<UserProfile> {
   return request<UserProfile>('/api/auth/demo-otp', {
     method: 'POST',
-    body: JSON.stringify({ phone, code }),
+    body: JSON.stringify({ phone, code, fullName }),
   })
 }
 
@@ -54,6 +54,7 @@ export async function endGoogleSession(): Promise<void> {
 export function updateGoogleProfile(
   profile: Partial<Pick<UserProfile, 'fullName' | 'phone' | 'age' | 'gender' | 'avatarUrl'>> & {
     age?: number | null
+    avatarUrl?: string | null
   },
 ): Promise<UserProfile> {
   return request<UserProfile>('/api/profile', {
@@ -137,5 +138,28 @@ export function updateVendorStaff(
 export function deleteVendorStaff(id: string): Promise<void> {
   return request<void>(`/api/vendor/staff/${encodeURIComponent(id)}`, {
     method: 'DELETE',
+  })
+}
+
+export function loadVendorBranches(): Promise<Branch[]> {
+  return request<Branch[]>('/api/vendor/branches')
+}
+
+export function createVendorBranch(
+  branch: Omit<Branch, 'id' | 'vendorId'>,
+): Promise<Branch> {
+  return request<Branch>('/api/vendor/branches', {
+    method: 'POST',
+    body: JSON.stringify(branch),
+  })
+}
+
+export function updateVendorBranch(
+  id: string,
+  branch: Partial<Pick<Branch, 'name' | 'address' | 'seatCapacity' | 'serviceCapacityPerHour'>>,
+): Promise<Branch> {
+  return request<Branch>(`/api/vendor/branches/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(branch),
   })
 }

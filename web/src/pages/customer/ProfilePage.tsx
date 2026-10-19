@@ -31,6 +31,14 @@ export function CustomerProfilePage() {
             <p style={{ margin: 0 }}>
               <strong>Email:</strong> {user?.email || 'Not provided'}
             </p>
+            {user?.age !== undefined && (
+              <p style={{ margin: 0 }}><strong>Age:</strong> {user.age}</p>
+            )}
+            {user?.gender && (
+              <p style={{ margin: 0 }}>
+                <strong>Gender:</strong> {user.gender.replace('_', ' ')}
+              </p>
+            )}
           </div>
         </div>
         <nav style={{ marginTop: 16 }}>

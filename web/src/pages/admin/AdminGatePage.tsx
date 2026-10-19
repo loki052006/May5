@@ -19,7 +19,7 @@ export function AdminGatePage() {
 
   return (
     <div className="may5-page-pad" style={{ maxWidth: 420, paddingTop: 48 }}>
-      <img src="/may5-logo.svg" alt="MAY5" className="may5-logo" />
+      <img src="/may5-brand.png" alt="MAY5 — Sign your style" className="may5-logo" />
       <h1>Admin gate</h1>
       <p style={{ color: 'var(--may5-muted)' }}>Enter platform access code (demo: MAY5).</p>
       <form onSubmit={onSubmit}>

@@ -53,8 +53,19 @@ textarea {
 }
 
 .may5-logo {
-  height: 28px;
-  width: auto;
+  display: block;
+  width: 150px;
+  height: 60px;
+  object-fit: cover;
+  object-position: center 48%;
+  background: #fff;
+  border-radius: 6px;
+}
+
+.may5-mobile-brand {
+  display: block;
+  width: fit-content;
+  padding: 8px 12px;
 }
 
 .may5-btn {
