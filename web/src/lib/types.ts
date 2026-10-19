@@ -27,6 +27,25 @@ export interface Salon {
   lat: number
   lng: number
   branchId?: string
+  businessType?: string
+  description?: string
+  phone?: string
+  email?: string
+  website?: string
+  openingHours?: string
+  demoListing?: boolean
+}
+
+export interface VendorBusinessProfile {
+  id: string
+  businessName: string
+  businessType: string
+  description: string
+  address: string
+  phone: string
+  email: string
+  website: string
+  openingHours: string
 }
 
 export interface ServiceItem {
@@ -38,6 +57,7 @@ export interface ServiceItem {
   category: 'popular' | 'other'
   homeService: boolean
   imageUrl?: string
+  description?: string
 }
 
 export interface StaffMember {
