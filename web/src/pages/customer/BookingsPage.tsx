@@ -1,11 +1,12 @@
 import { Link } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { getState, subscribe } from '../../lib/store'
-import { salons, services } from '../../lib/mockData'
 import { formatIndianDate } from '../../lib/format'
+import { usePublicCatalog } from '../../lib/usePublicCatalog'
 
 export function CustomerBookingsPage() {
   const [, tick] = useState(0)
+  const { salons, services } = usePublicCatalog()
   useEffect(() => subscribe(() => tick((n) => n + 1)), [])
   const bookings = getState().bookings
 
