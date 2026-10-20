@@ -55,11 +55,11 @@ textarea {
 .may5-logo {
   display: block;
   width: 150px;
-  height: 60px;
-  object-fit: cover;
+  height: 48px;
+  object-fit: contain;
   object-position: center 48%;
-  background: #fff;
-  border-radius: 6px;
+  background: transparent;
+  border-radius: 0;
 }
 
 .may5-mobile-brand {
