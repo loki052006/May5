@@ -15,6 +15,8 @@ export const salons: Salon[] = [
     lng: 77.6408,
     branchId: 'branch-1',
     businessType: 'Hair salon',
+    openingHours: 'Mon-Sat, 10:00 AM-8:00 PM',
+    targetAudience: 'unisex',
   },
   {
     id: 'salon-2',
@@ -29,6 +31,8 @@ export const salons: Salon[] = [
     lng: 77.6066,
     branchId: 'branch-1',
     businessType: 'Hair salon',
+    openingHours: 'Mon-Sun, 9:00 AM-9:00 PM',
+    targetAudience: 'unisex',
   },
   {
     id: 'salon-3',
@@ -44,6 +48,8 @@ export const salons: Salon[] = [
     lng: 77.6245,
     branchId: 'branch-2',
     businessType: 'Beauty parlour',
+    openingHours: 'Mon-Sat, 10:00 AM-8:00 PM',
+    targetAudience: 'women',
   },
   {
     id: 'salon-4',
@@ -56,6 +62,8 @@ export const salons: Salon[] = [
     lat: 12.925,
     lng: 77.5838,
     businessType: 'Beauty parlour',
+    openingHours: 'Mon-Sat, 9:00 AM-7:00 PM',
+    targetAudience: 'women',
     demoListing: true,
   },
   {
@@ -69,6 +77,8 @@ export const salons: Salon[] = [
     lat: 12.9698,
     lng: 77.75,
     businessType: 'Hair salon',
+    openingHours: 'Mon-Sat, 9:00 AM-9:00 PM',
+    targetAudience: 'unisex',
     demoListing: true,
   },
   {
@@ -82,6 +92,8 @@ export const salons: Salon[] = [
     lat: 12.9116,
     lng: 77.6389,
     businessType: 'Spa & wellness',
+    openingHours: 'Mon-Sun, 10:00 AM-9:00 PM',
+    targetAudience: 'unisex',
     demoListing: true,
   },
   {
@@ -95,6 +107,8 @@ export const salons: Salon[] = [
     lat: 12.9077,
     lng: 77.585,
     businessType: 'Nail studio',
+    openingHours: 'Mon-Sat, 10:00 AM-8:00 PM',
+    targetAudience: 'women',
     demoListing: true,
   },
   {
@@ -108,6 +122,8 @@ export const salons: Salon[] = [
     lat: 13.0031,
     lng: 77.5643,
     businessType: 'Beauty parlour',
+    openingHours: 'Mon-Sun, 10:00 AM-8:00 PM',
+    targetAudience: 'women',
     demoListing: true,
   },
 ]

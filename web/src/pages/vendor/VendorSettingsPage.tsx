@@ -20,6 +20,9 @@ const emptyProfile: VendorBusinessProfile = {
   email: '',
   website: '',
   openingHours: '',
+  targetAudience: 'unisex',
+  lat: null,
+  lng: null,
 }
 
 export function VendorSettingsPage() {
@@ -182,6 +185,26 @@ export function VendorSettingsPage() {
     }
   }
 
+  function captureBusinessLocation() {
+    if (!navigator.geolocation) {
+      setProfileError('Location is not supported by this browser. You can enter coordinates manually.')
+      return
+    }
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => {
+        setProfile({ ...profile, lat: Number(coords.latitude.toFixed(6)), lng: Number(coords.longitude.toFixed(6)) })
+        setProfileError('')
+      },
+      (locationError) => {
+        console.error('Could not determine business location:', locationError)
+        setProfileError(locationError.code === locationError.PERMISSION_DENIED
+          ? 'Allow location access to use your current store location.'
+          : 'Could not determine your location. You can enter coordinates manually.')
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
+    )
+  }
+
   return (
     <>
       <h1>Settings</h1>
@@ -216,6 +239,19 @@ export function VendorSettingsPage() {
             <input id="business-website" className="may5-input" type="url" value={profile.website} onChange={(event) => setProfile({ ...profile, website: event.target.value })} placeholder="https://example.com" maxLength={240} />
             <label htmlFor="business-hours">Opening hours</label>
             <input id="business-hours" className="may5-input" value={profile.openingHours} onChange={(event) => setProfile({ ...profile, openingHours: event.target.value })} placeholder="Mon–Sat, 10:00 AM–8:00 PM" maxLength={240} />
+            <label htmlFor="business-audience">Who can book services?</label>
+            <select id="business-audience" className="may5-input" value={profile.targetAudience} onChange={(event) => setProfile({ ...profile, targetAudience: event.target.value as VendorBusinessProfile['targetAudience'] })}>
+              <option value="unisex">Everyone</option>
+              <option value="women">Women only</option>
+              <option value="men">Men only</option>
+            </select>
+            <label>Store map location (latitude / longitude)</label>
+            <p style={{ color: 'var(--may5-muted)', margin: 0, fontSize: '0.85rem' }}>A map pin helps customers find your store. Coordinates can be obtained from your device location or entered manually.</p>
+            <div className="business-coordinate-row">
+              <input className="may5-input" type="number" aria-label="Store latitude" min={-90} max={90} step="any" placeholder="Latitude" value={profile.lat ?? ''} onChange={(event) => setProfile({ ...profile, lat: event.target.value ? Number(event.target.value) : null })} />
+              <input className="may5-input" type="number" aria-label="Store longitude" min={-180} max={180} step="any" placeholder="Longitude" value={profile.lng ?? ''} onChange={(event) => setProfile({ ...profile, lng: event.target.value ? Number(event.target.value) : null })} />
+            </div>
+            <button type="button" className="may5-btn may5-btn-secondary" onClick={captureBusinessLocation}>Use this device location</button>
             {profileError && <p role="alert" style={{ color: 'var(--may5-danger)', margin: 0 }}>{profileError}</p>}
             {profileSaved && <p role="status" style={{ color: 'var(--may5-success)', margin: 0 }}>Business details saved. Your listing is visible to customers.</p>}
             <button type="submit" className="may5-btn may5-btn-primary" disabled={profileSaving}>

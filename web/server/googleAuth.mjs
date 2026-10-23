@@ -6,6 +6,7 @@ import express from 'express'
 import { OAuth2Client } from 'google-auth-library'
 import { MongoClient, ObjectId } from 'mongodb'
 import { fileURLToPath } from 'node:url'
+import webpush from 'web-push'
 
 const clientId = process.env.GOOGLE_CLIENT_ID ?? process.env.VITE_GOOGLE_CLIENT_ID
 const clientSecret = process.env.GOOGLE_CLIENT_SECRET
@@ -32,6 +33,10 @@ let bookings
 let vendorServices
 let vendorStaff
 let vendorBranches
+let supportReports
+let pushSubscriptions
+let customerNotifications
+let pushConfiguration
 
 const emptyBusinessProfile = {
   businessName: '',
@@ -42,15 +47,20 @@ const emptyBusinessProfile = {
   email: '',
   website: '',
   openingHours: '',
+  targetAudience: 'unisex',
 }
 
 function toBusinessProfile(user) {
-  return Object.fromEntries(
-    [
-      ['id', user.businessId ?? ''],
-      ...Object.keys(emptyBusinessProfile).map((key) => [key, user[key] ?? '']),
-    ],
-  )
+  return {
+    ...Object.fromEntries(
+      [
+        ['id', user.businessId ?? ''],
+        ...Object.keys(emptyBusinessProfile).map((key) => [key, user[key] ?? '']),
+      ],
+    ),
+    lat: Number.isFinite(user.lat) ? user.lat : null,
+    lng: Number.isFinite(user.lng) ? user.lng : null,
+  }
 }
 
 app.use(cors({ origin: true }))
@@ -358,6 +368,375 @@ app.patch('/api/profile', async (req, res) => {
   }
 })
 
+const defaultCustomerSettings = {
+  addresses: [],
+  notifications: {
+    bookingConfirmations: true,
+    appointmentReminders: true,
+    bookingStatusUpdates: true,
+    offersAndPromotions: true,
+  },
+  bookingPreferences: {
+    serviceLocation: 'salon',
+    preferredTime: '',
+  },
+  groomingPreferences: {
+    hairType: '',
+    skinType: '',
+    allergies: '',
+    notes: '',
+  },
+}
+
+function notificationEnabled(user, type) {
+  const key = {
+    booking_confirmation: 'bookingConfirmations',
+    appointment_reminder: 'appointmentReminders',
+    booking_update: 'bookingStatusUpdates',
+    offer: 'offersAndPromotions',
+  }[type]
+  return key ? user.customerSettings?.notifications?.[key] !== false : false
+}
+
+async function sendPushToCustomer(userId, title, body, url) {
+  if (!pushConfiguration) return { delivered: 0, failed: 0 }
+  const records = await pushSubscriptions.find({ userId }).toArray()
+  const outcomes = await Promise.all(records.map(async (record) => {
+    try {
+      await webpush.sendNotification(
+        record.subscription,
+        JSON.stringify({ title, body, url }),
+        { TTL: 86400 },
+      )
+      return 'delivered'
+    } catch (err) {
+      const statusCode = err?.statusCode
+      if (statusCode === 404 || statusCode === 410) {
+        await pushSubscriptions.deleteOne({ _id: record._id })
+        return 'expired'
+      }
+      console.error('Could not deliver MAY5 push notification:', err)
+      return 'failed'
+    }
+  }))
+  return {
+    delivered: outcomes.filter((outcome) => outcome === 'delivered').length,
+    failed: outcomes.filter((outcome) => outcome === 'failed').length,
+  }
+}
+
+async function createCustomerNotification(user, type, title, body, url = '/customer/profile/notifications') {
+  try {
+    const result = await customerNotifications.insertOne({
+      userId: user.googleId,
+      type,
+      title,
+      body,
+      url,
+      createdAt: new Date(),
+      read: false,
+    })
+    if (notificationEnabled(user, type)) {
+      await sendPushToCustomer(user.googleId, title, body, url)
+    }
+    return result.insertedId
+  } catch (err) {
+    console.error('Could not create MAY5 customer notification:', err)
+    return null
+  }
+}
+
+app.get('/api/customer/settings', async (req, res) => {
+  try {
+    const user = await authenticatedUser(req)
+    if (!user) {
+      res.status(401).json({ error: 'Authentication required' })
+      return
+    }
+    res.json({
+      ...defaultCustomerSettings,
+      ...(user.customerSettings ?? {}),
+      notifications: {
+        ...defaultCustomerSettings.notifications,
+        ...(user.customerSettings?.notifications ?? {}),
+      },
+      bookingPreferences: {
+        ...defaultCustomerSettings.bookingPreferences,
+        ...(user.customerSettings?.bookingPreferences ?? {}),
+      },
+      groomingPreferences: {
+        ...defaultCustomerSettings.groomingPreferences,
+        ...(user.customerSettings?.groomingPreferences ?? {}),
+      },
+    })
+  } catch (err) {
+    console.error('Could not load customer settings:', err)
+    res.status(500).json({ error: 'Could not load customer settings' })
+  }
+})
+
+app.get('/api/customer/notifications', async (req, res) => {
+  try {
+    const user = await authenticatedUser(req)
+    if (!user) {
+      res.status(401).json({ error: 'Authentication required' })
+      return
+    }
+    const records = await customerNotifications
+      .find({ userId: user.googleId })
+      .sort({ createdAt: -1 })
+      .limit(50)
+      .toArray()
+    res.json(records.map(({ _id, userId: _userId, url: _url, ...notification }) => ({
+      ...notification,
+      id: _id.toString(),
+      createdAt: notification.createdAt.toISOString(),
+    })))
+  } catch (err) {
+    console.error('Could not load customer notifications:', err)
+    res.status(500).json({ error: 'Could not load notifications' })
+  }
+})
+
+app.get('/api/push/public-key', async (_req, res) => {
+  if (!pushConfiguration) {
+    res.status(503).json({ error: 'Push notifications are not configured' })
+    return
+  }
+  res.json({ publicKey: pushConfiguration.publicKey })
+})
+
+app.post('/api/push/test', async (req, res) => {
+  try {
+    const user = await authenticatedUser(req)
+    if (!user) {
+      res.status(401).json({ error: 'Authentication required' })
+      return
+    }
+    if (user.role !== 'customer') {
+      res.status(403).json({ error: 'Customer account required' })
+      return
+    }
+    if (!pushConfiguration) {
+      res.status(503).json({ error: 'Push notifications are not configured' })
+      return
+    }
+    const subscriptions = await pushSubscriptions.find({ userId: user.googleId }).limit(10).toArray()
+    if (!subscriptions.length) {
+      res.status(409).json({ error: 'Enable browser notifications on this device first' })
+      return
+    }
+    const result = await sendPushToCustomer(
+      user.googleId,
+      'MAY5 notifications are on',
+      'You’ll receive booking confirmations and appointment reminders here.',
+      '/customer/profile/notifications',
+    )
+    if (result.delivered === 0) {
+      res.status(502).json({ error: 'The test push could not be delivered. Check this browser’s subscription and try again.' })
+      return
+    }
+    res.status(204).end()
+  } catch (err) {
+    console.error('Could not send test browser push:', err)
+    res.status(500).json({ error: 'Could not send a test notification' })
+  }
+})
+
+app.post('/api/push/subscriptions', async (req, res) => {
+  try {
+    const user = await authenticatedUser(req)
+    if (!user) {
+      res.status(401).json({ error: 'Authentication required' })
+      return
+    }
+    if (user.role !== 'customer') {
+      res.status(403).json({ error: 'Customer account required' })
+      return
+    }
+    const subscription = req.body ?? {}
+    if (
+      typeof subscription.endpoint !== 'string' ||
+      subscription.endpoint.length > 2048 ||
+      !/^https:\/\//i.test(subscription.endpoint) ||
+      typeof subscription.keys?.p256dh !== 'string' ||
+      subscription.keys.p256dh.length > 256 ||
+      typeof subscription.keys?.auth !== 'string' ||
+      subscription.keys.auth.length > 256
+    ) {
+      res.status(400).json({ error: 'Invalid browser push subscription' })
+      return
+    }
+    const existingSubscription = await pushSubscriptions.findOne({ endpoint: subscription.endpoint })
+    if (!existingSubscription) {
+      const subscriptionCount = await pushSubscriptions.countDocuments({ userId: user.googleId })
+      if (subscriptionCount >= 10) {
+        res.status(409).json({ error: 'This account already has the maximum number of notification devices' })
+        return
+      }
+    }
+    await pushSubscriptions.updateOne(
+      { endpoint: subscription.endpoint },
+      { $set: { userId: user.googleId, endpoint: subscription.endpoint, subscription, updatedAt: new Date() } },
+      { upsert: true },
+    )
+    res.status(204).end()
+  } catch (err) {
+    console.error('Could not save browser push subscription:', err)
+    res.status(500).json({ error: 'Could not enable push notifications' })
+  }
+})
+
+app.delete('/api/push/subscriptions', async (req, res) => {
+  try {
+    const user = await authenticatedUser(req)
+    if (!user) {
+      res.status(401).json({ error: 'Authentication required' })
+      return
+    }
+    const { endpoint } = req.body ?? {}
+    if (typeof endpoint !== 'string' || endpoint.length > 2048) {
+      res.status(400).json({ error: 'Invalid browser push endpoint' })
+      return
+    }
+    await pushSubscriptions.deleteOne({ userId: user.googleId, endpoint })
+    res.status(204).end()
+  } catch (err) {
+    console.error('Could not remove browser push subscription:', err)
+    res.status(500).json({ error: 'Could not disable push notifications' })
+  }
+})
+
+app.patch('/api/customer/settings', async (req, res) => {
+  try {
+    const user = await authenticatedUser(req)
+    if (!user) {
+      res.status(401).json({ error: 'Authentication required' })
+      return
+    }
+    const { addresses, notifications, bookingPreferences, groomingPreferences } = req.body ?? {}
+    if (
+      !Array.isArray(addresses) ||
+      addresses.length > 20 ||
+      addresses.some((address) =>
+        !address ||
+        typeof address.id !== 'string' ||
+        address.id.length > 80 ||
+        typeof address.label !== 'string' ||
+        !address.label.trim() ||
+        address.label.length > 40 ||
+        typeof address.address !== 'string' ||
+        !address.address.trim() ||
+        address.address.length > 300 ||
+        typeof address.city !== 'string' ||
+        !address.city.trim() ||
+        address.city.length > 100 ||
+        typeof address.pincode !== 'string' ||
+        !/^\d{6}$/.test(address.pincode)
+      )
+    ) {
+      res.status(400).json({ error: 'Check the saved addresses and try again' })
+      return
+    }
+    const notificationKeys = Object.keys(defaultCustomerSettings.notifications)
+    if (
+      !notifications ||
+      notificationKeys.some((key) => typeof notifications[key] !== 'boolean')
+    ) {
+      res.status(400).json({ error: 'Invalid notification preferences' })
+      return
+    }
+    if (
+      !bookingPreferences ||
+      !['salon', 'home'].includes(bookingPreferences.serviceLocation) ||
+      typeof bookingPreferences.preferredTime !== 'string' ||
+      bookingPreferences.preferredTime.length > 80
+    ) {
+      res.status(400).json({ error: 'Invalid booking preferences' })
+      return
+    }
+    const groomingKeys = Object.keys(defaultCustomerSettings.groomingPreferences)
+    if (
+      !groomingPreferences ||
+      groomingKeys.some((key) =>
+        typeof groomingPreferences[key] !== 'string' || groomingPreferences[key].length > 500
+      )
+    ) {
+      res.status(400).json({ error: 'Invalid grooming preferences' })
+      return
+    }
+
+    const customerSettings = { addresses, notifications, bookingPreferences, groomingPreferences }
+    await users.updateOne(
+      { googleId: user.googleId },
+      { $set: { customerSettings, updatedAt: new Date() } },
+    )
+    res.json(customerSettings)
+  } catch (err) {
+    console.error('Could not save customer settings:', err)
+    res.status(500).json({ error: 'Could not save customer settings' })
+  }
+})
+
+app.post('/api/support/report', async (req, res) => {
+  try {
+    const user = await authenticatedUser(req)
+    if (!user) {
+      res.status(401).json({ error: 'Authentication required' })
+      return
+    }
+    const { category, message } = req.body ?? {}
+    if (
+      typeof category !== 'string' ||
+      !['booking', 'business', 'account', 'payment', 'other'].includes(category) ||
+      typeof message !== 'string' ||
+      message.trim().length < 10 ||
+      message.length > 3000
+    ) {
+      res.status(400).json({ error: 'Choose a category and enter at least 10 characters' })
+      return
+    }
+    await supportReports.insertOne({
+      userId: user.googleId,
+      category,
+      message: message.trim(),
+      createdAt: new Date(),
+      status: 'open',
+    })
+    res.status(201).json({ ok: true })
+  } catch (err) {
+    console.error('Could not submit customer support report:', err)
+    res.status(500).json({ error: 'Could not submit your report' })
+  }
+})
+
+app.delete('/api/account', async (req, res) => {
+  try {
+    const user = await authenticatedUser(req)
+    if (!user) {
+      res.status(401).json({ error: 'Authentication required' })
+      return
+    }
+    if (user.role !== 'customer') {
+      res.status(403).json({ error: 'Only customer accounts can be deleted here' })
+      return
+    }
+    await Promise.all([
+      sessions.deleteMany({ userId: user.googleId }),
+      bookings.deleteMany({ customerId: user.googleId }),
+      supportReports.deleteMany({ userId: user.googleId }),
+      pushSubscriptions.deleteMany({ userId: user.googleId }),
+      customerNotifications.deleteMany({ userId: user.googleId }),
+    ])
+    await users.deleteOne({ googleId: user.googleId })
+    clearSessionCookie(res)
+    res.status(204).end()
+  } catch (err) {
+    console.error('Could not delete customer account:', err)
+    res.status(500).json({ error: 'Could not delete customer account' })
+  }
+})
+
 app.get('/api/bookings', async (req, res) => {
   let user
   try {
@@ -475,6 +854,13 @@ app.post('/api/bookings', async (req, res) => {
 
   try {
     const result = await bookings.insertOne(booking)
+    await createCustomerNotification(
+      user,
+      'booking_confirmation',
+      'Booking confirmed',
+      `Your appointment is scheduled for ${new Date(booking.scheduledAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}.`,
+      '/customer/bookings',
+    )
     res.status(201).json({ ...booking, id: result.insertedId })
   } catch (err) {
     console.error('MongoDB booking save failed:', err)
@@ -502,6 +888,9 @@ app.get('/api/catalog', async (_req, res) => {
         email: 1,
         website: 1,
         openingHours: 1,
+        targetAudience: 1,
+        lat: 1,
+        lng: 1,
       })
       .toArray()
     if (records.length === 0) {
@@ -536,14 +925,15 @@ app.get('/api/catalog', async (_req, res) => {
         coverImage: categoryImage,
         homeService: vendorServices.some((service) => service.homeService),
         onlineServices: vendorServices.length > 0,
-        lat: 0,
-        lng: 0,
         businessType: record.businessType,
         description: record.description,
         phone: record.phone,
         email: record.email,
         website: record.website,
         openingHours: record.openingHours,
+        targetAudience: record.targetAudience ?? 'unisex',
+        lat: Number.isFinite(record.lat) ? record.lat : 0,
+        lng: Number.isFinite(record.lng) ? record.lng : 0,
         branchId: `vendor-${index}`,
       }
     })
@@ -600,6 +990,30 @@ app.patch('/api/vendor/profile', async (req, res) => {
         return
       }
       fields[key] = normalized
+    }
+    if (fields.targetAudience !== undefined && !['women', 'men', 'unisex'].includes(fields.targetAudience)) {
+      res.status(400).json({ error: 'Choose a valid customer audience' })
+      return
+    }
+    const hasLatitude = Object.hasOwn(profile, 'lat')
+    const hasLongitude = Object.hasOwn(profile, 'lng')
+    if (hasLatitude !== hasLongitude) {
+      res.status(400).json({ error: 'Enter both store coordinates or leave both blank' })
+      return
+    }
+    if (hasLatitude) {
+      const { lat, lng } = profile
+      if (
+        (lat === null && lng === null) ||
+        (Number.isFinite(lat) && lat >= -90 && lat <= 90 &&
+          Number.isFinite(lng) && lng >= -180 && lng <= 180)
+      ) {
+        fields.lat = lat
+        fields.lng = lng
+      } else {
+        res.status(400).json({ error: 'Enter valid latitude and longitude coordinates' })
+        return
+      }
     }
     if (fields.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(fields.email)) {
       res.status(400).json({ error: 'Enter a valid business email address' })
@@ -1111,6 +1525,33 @@ async function start() {
     vendorServices = database.collection('vendorServices')
     vendorStaff = database.collection('vendorStaff')
     vendorBranches = database.collection('vendorBranches')
+    supportReports = database.collection('supportReports')
+    pushSubscriptions = database.collection('pushSubscriptions')
+    customerNotifications = database.collection('customerNotifications')
+    const pushKeyStore = database.collection('systemConfiguration')
+    const generatedVapidKeys = webpush.generateVAPIDKeys()
+    const vapidKeys = await pushKeyStore.findOneAndUpdate(
+      { _id: 'web-push-vapid' },
+      {
+        $setOnInsert: {
+          publicKey: generatedVapidKeys.publicKey,
+          privateKey: generatedVapidKeys.privateKey,
+          createdAt: new Date(),
+        },
+      },
+      { upsert: true, returnDocument: 'after' },
+    )
+    if (!vapidKeys?.publicKey || !vapidKeys?.privateKey) {
+      throw new Error('Could not initialize server-side Web Push keys')
+    }
+    pushConfiguration = { publicKey: vapidKeys.publicKey }
+    webpush.setVapidDetails(
+      process.env.PUSH_CONTACT_EMAIL?.startsWith('mailto:')
+        ? process.env.PUSH_CONTACT_EMAIL
+        : `mailto:${process.env.PUSH_CONTACT_EMAIL ?? 'support@may5.app'}`,
+      vapidKeys.publicKey,
+      vapidKeys.privateKey,
+    )
     await users.createIndex({ googleId: 1 }, { unique: true })
     await sessions.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 })
     await sessions.createIndex({ userId: 1 })
@@ -1118,6 +1559,49 @@ async function start() {
     await vendorServices.createIndex({ vendorId: 1, createdAt: -1 })
     await vendorStaff.createIndex({ vendorId: 1, createdAt: -1 })
     await vendorBranches.createIndex({ vendorId: 1, createdAt: 1 })
+    await supportReports.createIndex({ userId: 1, createdAt: -1 })
+    await pushSubscriptions.createIndex({ endpoint: 1 }, { unique: true })
+    await pushSubscriptions.createIndex({ userId: 1 })
+    await customerNotifications.createIndex({ userId: 1, createdAt: -1 })
+
+    async function sendUpcomingAppointmentReminders() {
+      const now = new Date()
+      const nextWindow = new Date(now.getTime() + 15 * 60 * 1000)
+      const upcoming = await bookings
+        .find({
+          status: 'scheduled',
+          scheduledAt: { $gte: now.toISOString(), $lte: nextWindow.toISOString() },
+          reminderSentAt: { $exists: false },
+        })
+        .limit(100)
+        .toArray()
+      for (const booking of upcoming) {
+        const claimed = await bookings.updateOne(
+          { _id: booking._id, reminderSentAt: { $exists: false } },
+          { $set: { reminderSentAt: new Date() } },
+        )
+        if (claimed.modifiedCount !== 1) continue
+        const user = await users.findOne({ googleId: booking.customerId })
+        if (!user || !notificationEnabled(user, 'appointment_reminder')) continue
+        await createCustomerNotification(
+          user,
+          'appointment_reminder',
+          'Appointment reminder',
+          `Your appointment at ${new Date(booking.scheduledAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} is coming up soon.`,
+          '/customer/bookings',
+        )
+      }
+    }
+
+    const reminderTimer = setInterval(() => {
+      void sendUpcomingAppointmentReminders().catch((err) => {
+        console.error('Could not send appointment reminders:', err)
+      })
+    }, 60_000)
+    reminderTimer.unref()
+    void sendUpcomingAppointmentReminders().catch((err) => {
+      console.error('Could not send initial appointment reminders:', err)
+    })
 
     app.listen(port, '0.0.0.0', () => {
       console.log(`MAY5 server with MongoDB listening on port ${port}`)

@@ -28,6 +28,13 @@ JavaScript origins. If Vite chooses another port because 5173 is occupied, add
 that exact origin as well. The Vite development server proxies `/api` requests
 to the auth server on port 3001.
 
+For production sign-in, add the exact deployed website origin (for example
+`https://may5.onrender.com`) under the OAuth web client's Authorized JavaScript
+origins. Origins include the scheme and hostname and, for local sites, the port;
+they do not include a path or trailing route. A Google `origin_mismatch` error
+is fixed in this Google Cloud credential configuration and cannot be bypassed
+by application code. MAY5 displays the active origin when this happens.
+
 For production, configure these environment variables in the hosting
 environment and deploy the auth server behind the same `/api` origin as the
 web app. Never expose `GOOGLE_CLIENT_SECRET` to client-side code.
@@ -55,3 +62,26 @@ Business accounts can manage team members from the vendor Staff page: add,
 edit, activate or deactivate, and remove staff records. Staff names, roles,
 salon assignments, and optional Indian mobile numbers and email addresses are
 stored in the `may5.vendorStaff` collection.
+
+## Customer profile and discovery
+
+Customer addresses, notification preferences, booking preferences, and grooming
+preferences are stored on the authenticated user profile through
+`/api/customer/settings`. Customer problem reports are stored in
+`may5.supportReports`. Account deletion removes the customer profile, sessions,
+bookings, and support reports. The customer Explore page supports service
+categories, open-now, rating, offer, and audience filters; business opening
+hours, customer audience, and optional map coordinates are supplied through the
+business profile. Store owners can save coordinates manually or capture the
+device location.
+
+Explore uses Leaflet with OpenStreetMap tiles and attribution. Customers can
+center the map on their device location; businesses without coordinates do not
+appear as map markers until their owner adds a pin. Browser push notifications
+use VAPID keys generated once and stored server-side in the
+`may5.systemConfiguration` collection. Customers must opt in from Profile >
+Notifications. Booking confirmations are immediate and reminders are sent by a
+server-side 15-minute scheduler while the service is running. `PUSH_CONTACT_EMAIL`
+is optional and should be set to a monitored contact email for production.
+Customers can send a test notification from the same settings page to verify
+browser permission and delivery.

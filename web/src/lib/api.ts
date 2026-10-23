@@ -1,4 +1,4 @@
-import type { Booking, Branch, Salon, ServiceItem, UserProfile, UserRole, VendorBusinessProfile, VendorStaff } from './types'
+import type { Booking, Branch, CustomerNotification, CustomerSettings, Salon, ServiceItem, UserProfile, UserRole, VendorBusinessProfile, VendorStaff } from './types'
 
 export class ApiError extends Error {
   readonly status: number
@@ -67,6 +67,54 @@ export function updateGoogleRole(role: UserRole): Promise<UserProfile> {
   return request<UserProfile>('/api/profile', {
     method: 'PATCH',
     body: JSON.stringify({ role }),
+  })
+}
+
+export function loadCustomerSettings(): Promise<CustomerSettings> {
+  return request<CustomerSettings>('/api/customer/settings')
+}
+
+export function saveCustomerSettings(settings: CustomerSettings): Promise<CustomerSettings> {
+  return request<CustomerSettings>('/api/customer/settings', {
+    method: 'PATCH',
+    body: JSON.stringify(settings),
+  })
+}
+
+export function reportCustomerProblem(details: { category: string; message: string }): Promise<void> {
+  return request<void>('/api/support/report', {
+    method: 'POST',
+    body: JSON.stringify(details),
+  })
+}
+
+export function deleteCustomerAccount(): Promise<void> {
+  return request<void>('/api/account', { method: 'DELETE' })
+}
+
+export function loadCustomerNotifications(): Promise<CustomerNotification[]> {
+  return request<CustomerNotification[]>('/api/customer/notifications')
+}
+
+export function loadPushPublicKey(): Promise<string> {
+  return request<{ publicKey: string }>('/api/push/public-key').then((result) => result.publicKey)
+}
+
+export function savePushSubscription(subscription: PushSubscriptionJSON): Promise<void> {
+  return request<void>('/api/push/subscriptions', {
+    method: 'POST',
+    body: JSON.stringify(subscription),
+  })
+}
+
+export function sendPushTestNotification(): Promise<void> {
+  return request<void>('/api/push/test', { method: 'POST' })
+}
+
+export function removePushSubscription(endpoint: string): Promise<void> {
+  return request<void>('/api/push/subscriptions', {
+    method: 'DELETE',
+    body: JSON.stringify({ endpoint }),
   })
 }
 

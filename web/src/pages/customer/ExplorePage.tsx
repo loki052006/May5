@@ -1,16 +1,20 @@
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { Filter, Heart, Map, Search } from 'lucide-react'
-import { getState, subscribe } from '../../lib/store'
+import { Link, useSearchParams } from 'react-router-dom'
+import { Heart, List, Map, Search } from 'lucide-react'
+import { getState, store, subscribe } from '../../lib/store'
 import { useAuth } from '../../lib/auth'
 import { useEffect } from 'react'
 import { ExploreFilters } from './ExploreFilters'
 import { usePublicCatalog } from '../../lib/usePublicCatalog'
+import { isSalonOpenNow } from '../../lib/format'
+import { SalonMap } from './SalonMap'
 
 export function CustomerExplorePage() {
   const [, tick] = useState(0)
   const [filterOpen, setFilterOpen] = useState(false)
   const [q, setQ] = useState('')
+  const [selectedSalon, setSelectedSalon] = useState('')
+  const [searchParams, setSearchParams] = useSearchParams()
   const [favoriteError, setFavoriteError] = useState('')
   const { toggleFavorite } = useAuth()
   const { salons, services, error: catalogError } = usePublicCatalog()
@@ -19,6 +23,11 @@ export function CustomerExplorePage() {
 
   const filters = getState().filters
   const favorites = getState().favorites
+  const category = searchParams.get('category') ?? filters.serviceCategory
+  const mapMode = searchParams.get('view') === 'map'
+  useEffect(() => {
+    if (searchParams.get('openNow') === 'true') store.setFilters({ openNow: true })
+  }, [searchParams])
 
   async function onToggleFavorite(salonId: string) {
     setFavoriteError('')
@@ -34,14 +43,31 @@ export function CustomerExplorePage() {
     let items = [...salons]
     if (q.trim()) {
       const t = q.toLowerCase()
-      items = items.filter((s) => s.name.toLowerCase().includes(t) || s.address.toLowerCase().includes(t))
+      items = items.filter((s) =>
+        s.name.toLowerCase().includes(t) ||
+        s.address.toLowerCase().includes(t) ||
+        services.some((service) => service.salonId === s.id && service.name.toLowerCase().includes(t)),
+      )
     }
     if (filters.specialOffers) items = items.filter((s) => !!s.promo)
     if (filters.homeService) items = items.filter((s) => s.homeService)
     if (filters.onlineServices) items = items.filter((s) => s.onlineServices)
+    if (filters.openNow) items = items.filter((s) => isSalonOpenNow(s.openingHours))
+    if (filters.rating45) items = items.filter((s) => s.rating >= 4.5)
+    if (filters.ladiesOnly) items = items.filter((s) => s.targetAudience === 'women')
+    if (category) {
+      const normalized = category.toLowerCase()
+      items = items.filter((salon) => {
+        const salonCategory = `${salon.businessType ?? ''} ${salon.name}`.toLowerCase()
+        return services.some((service) =>
+          service.salonId === salon.id &&
+          `${service.name} ${service.description ?? ''}`.toLowerCase().includes(normalized.split(' ')[0]),
+        ) || salonCategory.includes(normalized.split(' ')[0])
+      })
+    }
     if (filters.sort === 'top_reviewed') items.sort((a, b) => b.rating - a.rating)
     return items
-  }, [q, filters, salons])
+  }, [q, filters, salons, services, category])
 
   return (
     <>
@@ -49,29 +75,50 @@ export function CustomerExplorePage() {
         <h1>Explore</h1>
         <div className="may5-search" style={{ marginTop: 12, background: '#fff' }}>
           <Search size={18} />
-          <input placeholder="Search salons..." value={q} onChange={(e) => setQ(e.target.value)} />
+          <input placeholder="Search for haircut, spa, salon..." value={q} onChange={(e) => setQ(e.target.value)} />
+          <button type="button" className="explore-view-toggle" onClick={() => setSearchParams(mapMode ? {} : { view: 'map', ...(category ? { category } : {}) })}>
+            {mapMode ? <><List size={17} /> List</> : <><Map size={17} /> Map</>}
+          </button>
         </div>
       </header>
 
       <div className="may5-page-pad">
         {catalogError && <p role="status" style={{ color: 'var(--may5-muted)' }}>{catalogError}</p>}
+        <div className="explore-filter-label">Filters</div>
+        <div className="explore-filter-chips">
+          {([
+            ['openNow', 'Open now'],
+            ['rating45', 'Rating 4.5+'],
+            ['specialOffers', 'Offers'],
+            ['ladiesOnly', 'Ladies only'],
+          ] as const).map(([key, label]) => (
+            <button key={key} type="button" className={`may5-chip ${filters[key] ? 'active' : ''}`} aria-pressed={filters[key]} onClick={() => store.setFilters({ [key]: !filters[key] })}>{label}</button>
+          ))}
+        </div>
+        <div className="explore-category-chips" aria-label="Service categories">
+          {['Hair', 'Barber & Grooming', 'Spa & Massage', 'Nails', 'Facial & Skincare'].map((label) => (
+            <button key={label} type="button" className={`may5-chip ${category === label ? 'active' : ''}`} aria-pressed={category === label} onClick={() => {
+              const next = new URLSearchParams(searchParams)
+              if (category === label) next.delete('category')
+              else next.set('category', label)
+              setSearchParams(next)
+              store.setFilters({ serviceCategory: category === label ? '' : label })
+            }}>{label}</button>
+          ))}
+        </div>
+
+        {mapMode && (
+          <SalonMap salons={list} selectedId={selectedSalon} onSelect={setSelectedSalon} />
+        )}
+
         {list.map((salon) => (
-          <article key={salon.id} className="may5-card" style={{ marginBottom: 16, overflow: 'hidden', position: 'relative' }}>
+          <article key={salon.id} className={`may5-card explore-salon-card ${mapMode ? 'explore-map-result' : ''}`}>
             <button
               type="button"
-              aria-label="Favorite"
+              aria-label={favorites.includes(salon.id) ? 'Remove from saved salons' : 'Save salon'}
+              aria-pressed={favorites.includes(salon.id)}
               onClick={() => void onToggleFavorite(salon.id)}
-              style={{
-                position: 'absolute',
-                top: 12,
-                right: 12,
-                background: '#fff',
-                border: 'none',
-                borderRadius: '50%',
-                width: 36,
-                height: 36,
-                cursor: 'pointer',
-              }}
+              className="explore-favorite"
             >
               <Heart
                 size={18}
@@ -80,8 +127,8 @@ export function CustomerExplorePage() {
               />
             </button>
             <Link to={`/salon/${salon.id}`}>
-              <img src={salon.coverImage} alt="" loading="lazy" decoding="async" style={{ width: '100%', height: 180, objectFit: 'cover' }} />
-              <div style={{ padding: 14 }}>
+              <img src={salon.coverImage} alt="" loading="lazy" decoding="async" />
+              <div className="explore-salon-info">
                 {salon.promo && <span className="may5-tag">{salon.promo}</span>}
                 <h3 style={{ margin: '8px 0 4px' }}>{salon.name}</h3>
                 <p style={{ margin: 0, color: 'var(--may5-muted)', fontSize: '0.85rem' }}>
@@ -90,39 +137,20 @@ export function CustomerExplorePage() {
                 <p style={{ margin: '6px 0 0', color: 'var(--may5-muted)', fontSize: '0.82rem' }}>
                   {salon.businessType ?? (salon.demoListing ? 'Sample business' : 'Salon')} · {services.filter((service) => service.salonId === salon.id).length} services
                 </p>
+                <div className="explore-card-tags">
+                  <span className={isSalonOpenNow(salon.openingHours) ? 'home-open' : 'home-closed'}>{isSalonOpenNow(salon.openingHours) ? 'Open now' : salon.openingHours ? 'Closed now' : 'Hours unavailable'}</span>
+                  {salon.targetAudience === 'women' && <span className="explore-audience">Ladies only</span>}
+                  {salon.promo && <span className="may5-tag">{salon.promo}</span>}
+                </div>
                 {salon.demoListing && <span className="may5-tag" style={{ marginTop: 8, display: 'inline-block' }}>Sample listing</span>}
               </div>
             </Link>
           </article>
         ))}
+        {list.length === 0 && <p className="explore-empty">No salons match these filters. Try clearing a filter or choosing another category.</p>}
         {favoriteError && <p role="alert" style={{ color: 'var(--may5-danger)' }}>{favoriteError}</p>}
 
-        <div
-          style={{
-            position: 'fixed',
-            bottom: 80,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            display: 'flex',
-            borderRadius: 999,
-            overflow: 'hidden',
-            boxShadow: 'var(--may5-shadow)',
-            maxWidth: 320,
-            width: '90%',
-          }}
-        >
-          <button
-            type="button"
-            className="may5-btn may5-btn-primary"
-            style={{ flex: 1, borderRadius: 0 }}
-            onClick={() => setFilterOpen(true)}
-          >
-            <Filter size={16} /> FILTER
-          </button>
-          <Link to="/customer/explore/map" className="may5-btn may5-btn-primary" style={{ flex: 1, borderRadius: 0, background: '#b2622d' }}>
-            <Map size={16} /> MAP
-          </Link>
-        </div>
+        <button type="button" className="explore-filter-button may5-btn may5-btn-primary" onClick={() => setFilterOpen(true)}>More filters</button>
       </div>
 
       <ExploreFilters open={filterOpen} onClose={() => setFilterOpen(false)} resultCount={list.length} />

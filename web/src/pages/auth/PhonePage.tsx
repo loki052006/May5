@@ -102,7 +102,14 @@ export function PhonePage() {
           inputMode="tel"
         />
         {error && (
-          <p style={{ color: 'var(--may5-danger)', fontSize: '0.875rem' }}>{error}</p>
+          <div role="alert" className="signin-error">
+            <p>{error}</p>
+            {error.includes('Authorized JavaScript origins') && (
+              <p className="signin-error-help">
+                In Google Cloud Console, open APIs &amp; Services → Credentials, select the MAY5 OAuth 2.0 Web client, add the origin shown above under <strong>Authorized JavaScript origins</strong> (not redirect URIs), then save. Changes can take a few minutes to apply.
+              </p>
+            )}
+          </div>
         )}
         <button type="submit" className="may5-btn may5-btn-primary" style={{ width: '100%', marginTop: 16 }}>
           Send OTP

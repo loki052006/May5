@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from 'react-router-dom'
-import { Calendar, Home, Search, User } from 'lucide-react'
+import { Calendar, Heart, Home, Search, User } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 
@@ -23,7 +23,11 @@ export function CustomerLayout() {
         </NavLink>
         <NavLink to="/customer/bookings" className={({ isActive }) => (isActive ? 'active' : '')}>
           <Calendar size={22} />
-          Calendar
+          Bookings
+        </NavLink>
+        <NavLink to="/customer/favorites" className={({ isActive }) => (isActive ? 'active' : '')}>
+          <Heart size={22} />
+          Saved
         </NavLink>
         <NavLink to="/customer/profile" className={({ isActive }) => (isActive ? 'active' : '')}>
           <User size={22} />

@@ -48,6 +48,9 @@ const HistoryPage = lazy(() =>
 const LogoutPage = lazy(() =>
   import('./pages/customer/LogoutPage').then((module) => ({ default: module.LogoutPage })),
 )
+const CustomerSettingsPage = lazy(() =>
+  import('./pages/customer/CustomerSettingsPage').then((module) => ({ default: module.CustomerSettingsPage })),
+)
 const SalonDetailPage = lazy(() =>
   import('./pages/salon/SalonDetailPage').then((module) => ({ default: module.SalonDetailPage })),
 )
@@ -146,14 +149,8 @@ export function AppRoutes() {
         <Route path="profile/edit" element={<EditProfilePage />} />
         <Route path="profile/history" element={<HistoryPage />} />
         <Route path="profile/logout" element={<LogoutPage />} />
-        <Route path="profile/addresses" element={stub('Addresses', '/(customer)/profile/addresses', '/customer/profile')} />
         <Route path="profile/payment-methods" element={stub('Payment methods', '/(customer)/profile/payment-methods', '/customer/profile')} />
-        <Route path="profile/notifications" element={stub('Notifications', '/(customer)/profile/notifications', '/customer/profile')} />
-        <Route path="profile/preferences" element={stub('Preferences', '/(customer)/profile/preferences', '/customer/profile')} />
-        <Route path="profile/legal" element={stub('Legal', '/(customer)/profile/legal', '/customer/profile')} />
-        <Route path="profile/help" element={stub('Help', '/(customer)/profile/help', '/customer/profile')} />
-        <Route path="profile/about" element={stub('About', '/(customer)/profile/about', '/customer/profile')} />
-        <Route path="profile/delete-account" element={stub('Delete account', '/(customer)/profile/delete-account', '/customer/profile')} />
+        <Route path="profile/:section" element={<CustomerSettingsPage />} />
       </Route>
 
       <Route

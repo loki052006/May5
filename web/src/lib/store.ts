@@ -22,6 +22,10 @@ const defaultFilters: SalonFilters = {
   specialOffers: false,
   homeService: false,
   onlineServices: false,
+  openNow: false,
+  rating45: false,
+  ladiesOnly: false,
+  serviceCategory: '',
 }
 
 const defaultState: AppState = {

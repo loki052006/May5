@@ -70,12 +70,22 @@ export async function signInWithGooglePopup(): Promise<GoogleUserPayload> {
   if (!oauth2) throw new Error('Google Sign-In is unavailable')
 
   const code = await new Promise<string>((resolve, reject) => {
+    const popupTimeout = window.setTimeout(() => {
+      reject(new Error('Google sign-in popup did not complete. Allow pop-ups for this site and try again.'))
+    }, 60_000)
     const client = oauth2.initCodeClient({
       client_id: CLIENT_ID,
       scope: 'openid email profile',
       ux_mode: 'popup',
       callback: (response) => {
+        window.clearTimeout(popupTimeout)
         if (response.error) {
+          if (response.error === 'origin_mismatch') {
+            reject(new Error(
+              `Google sign-in is not enabled for ${window.location.origin}. Add this exact origin to the Authorized JavaScript origins for the MAY5 Google OAuth web client, save the change, and try again.`,
+            ))
+            return
+          }
           reject(new Error(response.error))
           return
         }

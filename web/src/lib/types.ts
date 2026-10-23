@@ -15,6 +15,43 @@ export interface UserProfile {
   locationLabel?: string
 }
 
+export interface CustomerAddress {
+  id: string
+  label: string
+  address: string
+  city: string
+  pincode: string
+}
+
+export interface CustomerSettings {
+  addresses: CustomerAddress[]
+  notifications: {
+    bookingConfirmations: boolean
+    appointmentReminders: boolean
+    bookingStatusUpdates: boolean
+    offersAndPromotions: boolean
+  }
+  bookingPreferences: {
+    serviceLocation: 'salon' | 'home'
+    preferredTime: string
+  }
+  groomingPreferences: {
+    hairType: string
+    skinType: string
+    allergies: string
+    notes: string
+  }
+}
+
+export interface CustomerNotification {
+  id: string
+  type: 'booking_confirmation' | 'appointment_reminder' | 'booking_update' | 'offer'
+  title: string
+  body: string
+  createdAt: string
+  read: boolean
+}
+
 export interface Salon {
   id: string
   name: string
@@ -33,6 +70,7 @@ export interface Salon {
   email?: string
   website?: string
   openingHours?: string
+  targetAudience?: 'women' | 'men' | 'unisex'
   demoListing?: boolean
 }
 
@@ -46,6 +84,9 @@ export interface VendorBusinessProfile {
   email: string
   website: string
   openingHours: string
+  targetAudience: 'women' | 'men' | 'unisex'
+  lat: number | null
+  lng: number | null
 }
 
 export interface ServiceItem {
@@ -106,4 +147,8 @@ export interface SalonFilters {
   specialOffers: boolean
   homeService: boolean
   onlineServices: boolean
+  openNow: boolean
+  rating45: boolean
+  ladiesOnly: boolean
+  serviceCategory: string
 }
