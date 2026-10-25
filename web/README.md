@@ -126,10 +126,11 @@ also handles cases where the customer closes Checkout before returning to MAY5.
 Online payments are stored in `may5.paymentOrders`, with payment and booking
 references recorded for reconciliation.
 
-Sample salon and service listings are clearly marked as demos. Demo checkout is
-restricted to `RAZORPAY_TEST_KEY_ID` and `RAZORPAY_TEST_KEY_SECRET`; it never
-falls back to the live credentials. Add Razorpay test-mode credentials in the
-hosting environment to try demo payments. For test payment webhooks, also set
-`RAZORPAY_TEST_WEBHOOK_SECRET` and configure the test webhook to send
-`payment.captured` events to `/api/payments/razorpay/webhook`. Demo appointments
-are marked as such and do not represent a real booking with a business.
+Sample salon and service listings are clearly marked as illustrative demos,
+not real businesses or redeemable appointments. New demo checkout orders use
+the live `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET`, just like real business
+orders, and will charge real money if the customer completes checkout. The
+booking page requires customers to acknowledge this before creating an order.
+Demo appointments are marked as illustrative and do not represent a real
+booking with a business. Test-mode environment variables remain only to process
+any test orders created before this change.

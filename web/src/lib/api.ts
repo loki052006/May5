@@ -161,7 +161,9 @@ export interface RazorpayPaymentResponse {
 }
 
 export function createRazorpayOrder(
-  booking: Pick<Booking, 'salonId' | 'serviceId' | 'staffId' | 'scheduledAt'>,
+  booking: Pick<Booking, 'salonId' | 'serviceId' | 'staffId' | 'scheduledAt'> & {
+    acknowledgeDemoPayment?: boolean
+  },
 ): Promise<RazorpayOrder> {
   return request<RazorpayOrder>('/api/payments/razorpay/order', {
     method: 'POST',

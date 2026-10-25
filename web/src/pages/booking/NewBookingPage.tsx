@@ -61,6 +61,7 @@ export function NewBookingPage() {
   const [staffId, setStaffId] = useState('')
   const [when, setWhen] = useState('')
   const [paymentMode, setPaymentMode] = useState<PaymentMode>('online')
+  const [acknowledgeDemoPayment, setAcknowledgeDemoPayment] = useState(false)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const pref = getState().bookingLocationPref
@@ -83,6 +84,10 @@ export function NewBookingPage() {
       setError('Choose a future appointment date and time.')
       return
     }
+    if (salonRef.demoListing && !acknowledgeDemoPayment) {
+      setError('Confirm that you understand this demo service is illustrative and not redeemable.')
+      return
+    }
     setSaving(true)
     try {
       const bookingDetails = {
@@ -95,7 +100,10 @@ export function NewBookingPage() {
       let booking
       if (paymentMode === 'online') {
         if (!remote) throw new Error('Online payments require an authenticated MAY5 account.')
-        const order = await createRazorpayOrder(bookingDetails)
+        const order = await createRazorpayOrder({
+          ...bookingDetails,
+          ...(salonRef.demoListing ? { acknowledgeDemoPayment: true } : {}),
+        })
         await loadRazorpayCheckout()
         if (!window.Razorpay) throw new Error('Payment checkout is unavailable. Please try again.')
         const payment = await new Promise<RazorpayCheckoutResponse>((resolve, reject) => {
@@ -147,7 +155,7 @@ export function NewBookingPage() {
       </p>
       {salonRef.demoListing && remote && (
         <p className="may5-tag" role="status">
-          Demo listing — checkout uses Razorpay test mode and cannot charge real money.
+          Demo listing — this is not a real business or redeemable appointment. Continuing to Razorpay will charge real money.
         </p>
       )}
       {pref === 'home' && service.homeService && (
@@ -176,6 +184,21 @@ export function NewBookingPage() {
           required
         />
 
+        {salonRef.demoListing && (
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 16 }}>
+            <input
+              type="checkbox"
+              checked={acknowledgeDemoPayment}
+              onChange={(e) => setAcknowledgeDemoPayment(e.target.checked)}
+              required
+              style={{ marginTop: 4 }}
+            />
+            <span>
+              I understand this is an illustrative demo listing, the service is not redeemable, and I will be charged ₹{service.price.toLocaleString('en-IN')} if I complete payment.
+            </span>
+          </label>
+        )}
+
         <label>{salonRef.advancePaymentRequired ? 'Online payment required' : 'Payment'}</label>
         <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
           <button
@@ -183,7 +206,7 @@ export function NewBookingPage() {
             className={`may5-chip ${paymentMode === 'online' ? 'active' : ''}`}
             onClick={() => setPaymentMode('online')}
           >
-            {salonRef.demoListing ? 'Pay with test gateway' : 'Pay online'}
+            {salonRef.demoListing ? 'Pay with live gateway' : 'Pay online'}
           </button>
           {!salonRef.advancePaymentRequired && !salonRef.demoListing && (
             <button
@@ -197,7 +220,7 @@ export function NewBookingPage() {
         </div>
 
         <button type="submit" className="may5-btn may5-btn-primary" style={{ width: '100%' }} disabled={saving}>
-          {saving ? (paymentMode === 'online' ? 'Opening secure checkout…' : 'Saving booking…') : paymentMode === 'online' ? salonRef.demoListing ? 'Continue to test checkout' : 'Continue to payment' : 'Confirm booking'}
+          {saving ? (paymentMode === 'online' ? 'Opening secure checkout…' : 'Saving booking…') : paymentMode === 'online' ? salonRef.demoListing ? 'Continue to live checkout' : 'Continue to payment' : 'Confirm booking'}
         </button>
         {error && <p role="alert" style={{ color: 'var(--may5-danger)' }}>{error}</p>}
       </form>

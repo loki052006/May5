@@ -1018,6 +1018,10 @@ app.post('/api/payments/razorpay/order', async (req, res) => {
     const { salonId, serviceId, staffId, scheduledAt } = req.body ?? {}
     const demoService = demoServices.get(serviceId)
     const isDemoListing = Boolean(demoService)
+    if (isDemoListing && req.body?.acknowledgeDemoPayment !== true) {
+      res.status(400).json({ error: 'Confirm that this illustrative demo service is not redeemable before paying' })
+      return
+    }
     if (typeof salonId !== 'string' || !salonId.trim()) {
       res.status(400).json({ error: 'Choose a valid business' })
       return
@@ -1070,7 +1074,6 @@ app.post('/api/payments/razorpay/order', async (req, res) => {
 
     const receipt = `m5${randomBytes(18).toString('hex')}`
     const order = await razorpayRequest('/orders', {
-      testMode: isDemoListing,
       method: 'POST',
       body: JSON.stringify({
         amount,
@@ -1090,7 +1093,8 @@ app.post('/api/payments/razorpay/order', async (req, res) => {
       amount,
       currency: 'INR',
       requiresApproval: !preferences.acceptInstantBooking || preferences.requiresApproval,
-      ...(isDemoListing ? { isDemo: true, paymentEnvironment: 'test' } : { paymentEnvironment: 'live' }),
+      ...(isDemoListing ? { isDemo: true, demoPaymentAcknowledgedAt: new Date() } : {}),
+      paymentEnvironment: 'live',
       status: 'created',
       createdAt: new Date(),
     })
@@ -1098,7 +1102,7 @@ app.post('/api/payments/razorpay/order', async (req, res) => {
       orderId: order.id,
       amount: order.amount,
       currency: order.currency,
-      keyId: process.env[isDemoListing ? 'RAZORPAY_TEST_KEY_ID' : 'RAZORPAY_KEY_ID'],
+      keyId: process.env.RAZORPAY_KEY_ID,
       businessName: vendor.businessName,
       serviceName: service.name,
       customerName: user.fullName ?? '',
