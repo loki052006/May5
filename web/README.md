@@ -132,6 +132,7 @@ the live `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET`, just like real business
 orders, and will charge real money if the customer completes checkout. The
 booking page requires customers to acknowledge this before creating an order.
 Demo appointments are marked as illustrative and do not represent a real
-booking with a business. The public sample catalog includes 24 services and
-staff selections across the sample salons. Test-mode environment variables
-remain only to process any test orders created before this change.
+booking with a business. Every sample salon displays the complete 24-service
+sample menu, with server-side fixed prices for every salon/service combination.
+Test-mode environment variables remain only to process any test orders created
+before this change.

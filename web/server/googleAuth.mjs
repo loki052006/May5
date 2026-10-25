@@ -200,6 +200,15 @@ const demoServices = new Map([
   ['svc-24', { salonId: 'salon-8', name: 'Party makeup', price: 2800 }],
 ])
 
+const demoServiceTemplates = [...demoServices.entries()]
+for (const salonId of demoSalonNames.keys()) {
+  for (const [serviceId, service] of demoServiceTemplates) {
+    if (service.salonId !== salonId) {
+      demoServices.set(`demo-${salonId}-${serviceId}`, { ...service, salonId })
+    }
+  }
+}
+
 async function recordCapturedPayment(order, payment) {
   const existingBooking = await bookings.findOne({
     paymentOrderId: order.razorpayOrderId,

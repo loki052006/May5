@@ -128,7 +128,7 @@ export const salons: Salon[] = [
   },
 ]
 
-export const services: ServiceItem[] = [
+const demoServiceTemplates: ServiceItem[] = [
   {
     id: 'svc-1',
     salonId: 'salon-2',
@@ -365,6 +365,19 @@ export const services: ServiceItem[] = [
     homeService: true,
     imageUrl: 'https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?w=600&q=80',
   },
+]
+
+export const services: ServiceItem[] = [
+  ...demoServiceTemplates,
+  ...salons.flatMap((salon) =>
+    demoServiceTemplates
+      .filter((service) => service.salonId !== salon.id)
+      .map((service) => ({
+        ...service,
+        id: `demo-${salon.id}-${service.id}`,
+        salonId: salon.id,
+      })),
+  ),
 ]
 
 export const staff: StaffMember[] = [
