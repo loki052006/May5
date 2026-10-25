@@ -190,6 +190,14 @@ const demoServices = new Map([
   ['svc-14', { salonId: 'salon-7', name: 'Classic pedicure', price: 1100 }],
   ['svc-15', { salonId: 'salon-8', name: 'Saree draping and party makeup', price: 3200 }],
   ['svc-16', { salonId: 'salon-8', name: 'Hair styling', price: 900 }],
+  ['svc-17', { salonId: 'salon-1', name: 'Precision haircut', price: 950 }],
+  ['svc-18', { salonId: 'salon-2', name: 'Hair spa and repair treatment', price: 1600 }],
+  ['svc-19', { salonId: 'salon-3', name: 'Glow facial', price: 1450 }],
+  ['svc-20', { salonId: 'salon-4', name: 'Bridal makeup trial', price: 2500 }],
+  ['svc-21', { salonId: 'salon-5', name: 'Beard trim and shaping', price: 400 }],
+  ['svc-22', { salonId: 'salon-6', name: 'Deep tissue massage', price: 2600 }],
+  ['svc-23', { salonId: 'salon-7', name: 'Nail art add-on', price: 500 }],
+  ['svc-24', { salonId: 'salon-8', name: 'Party makeup', price: 2800 }],
 ])
 
 async function recordCapturedPayment(order, payment) {
