@@ -171,6 +171,7 @@ const demoSalonNames = new Map([
   ['salon-6', 'Petal Spa & Wellness'],
   ['salon-7', 'NailNest Studio'],
   ['salon-8', 'Mirror & Muse Beauty Lounge'],
+  ['salon-9', 'The Modern Barber & Grooming Co.'],
 ])
 
 const demoServices = new Map([
@@ -198,6 +199,18 @@ const demoServices = new Map([
   ['svc-22', { salonId: 'salon-6', name: 'Deep tissue massage', price: 2600 }],
   ['svc-23', { salonId: 'salon-7', name: 'Nail art add-on', price: 500 }],
   ['svc-24', { salonId: 'salon-8', name: 'Party makeup', price: 2800 }],
+  ['svc-25', { salonId: 'salon-9', name: 'Fade haircut and finish', price: 650 }],
+  ['svc-26', { salonId: 'salon-9', name: 'Hot towel shave', price: 450 }],
+  ['svc-27', { salonId: 'salon-9', name: 'Beard sculpt and line-up', price: 550 }],
+  ['svc-28', { salonId: 'salon-9', name: 'Head shave and scalp care', price: 700 }],
+  ['svc-29', { salonId: 'salon-5', name: 'Men’s haircut and beard combo', price: 1100 }],
+  ['svc-30', { salonId: 'salon-6', name: 'Swedish relaxation massage', price: 2400 }],
+  ['svc-31', { salonId: 'salon-6', name: 'Hot stone therapy', price: 3200 }],
+  ['svc-32', { salonId: 'salon-6', name: 'Body scrub and polish', price: 1900 }],
+  ['svc-33', { salonId: 'salon-4', name: 'Full arms and legs waxing', price: 1600 }],
+  ['svc-34', { salonId: 'salon-8', name: 'Eyebrow threading and tint', price: 650 }],
+  ['svc-35', { salonId: 'salon-3', name: 'Hydrating skin treatment', price: 2100 }],
+  ['svc-36', { salonId: 'salon-4', name: 'Manicure and pedicure combo', price: 1500 }],
 ])
 
 const demoServiceTemplates = [...demoServices.entries()]
