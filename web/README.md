@@ -69,12 +69,14 @@ stored in the `may5.vendorStaff` collection.
 
 ### Business operations
 
-Business profiles support storefront photos, full address and map coordinates,
-opening days and hours, amenities, and customer audience settings. Booking and
-customer-management preferences are saved with the vendor profile. When booking
-approval is required, new appointments are created as pending and can be
-approved or declined from the vendor Calendar. Service owners can pause or edit
-their listings; paused services are omitted from the public catalog.
+New business accounts complete their profile during setup, including at least
+one selected opening day and opening and closing times. Business profiles also
+support storefront photos, full address and map coordinates, amenities, and
+customer audience settings. Booking and customer-management preferences are
+saved with the vendor profile. When booking approval is required, new
+appointments are created as pending and can be approved or declined from the
+vendor Calendar. Service owners can pause or edit their listings; paused
+services are omitted from the public catalog.
 
 Appointments and their customer/service details power the business dashboard
 and analytics. Customer history can be disabled from Customer management.

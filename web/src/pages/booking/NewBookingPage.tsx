@@ -44,12 +44,19 @@ function loadRazorpayCheckout() {
   })
 }
 
+function localDateTimeMinimum() {
+  const now = new Date()
+  now.setMinutes(now.getMinutes() - now.getTimezoneOffset())
+  return now.toISOString().slice(0, 16)
+}
+
 export function NewBookingPage() {
   const { serviceId } = useParams()
   const { services, salons, loading } = usePublicCatalog()
   const svc = services.find((s) => s.id === serviceId)
   const salon = salons.find((s) => s.id === svc?.salonId)
   const { user } = useAuth()
+  const remote = user?.authProvider === 'google' || user?.authProvider === 'demo'
   const navigate = useNavigate()
   const [staffId, setStaffId] = useState('')
   const [when, setWhen] = useState('')
@@ -71,16 +78,24 @@ export function NewBookingPage() {
       return
     }
     setError('')
+    if (remote && salonRef.demoListing) {
+      setError('This sample listing is for display only. Choose a live business to make a booking.')
+      return
+    }
+    const scheduledAt = new Date(when)
+    if (!when || !Number.isFinite(scheduledAt.getTime()) || scheduledAt.getTime() <= Date.now()) {
+      setError('Choose a future appointment date and time.')
+      return
+    }
     setSaving(true)
     try {
       const bookingDetails = {
         salonId: salonRef.id,
         serviceId: service.id,
         staffId: staffId || undefined,
-        scheduledAt: new Date(when).toISOString(),
+        scheduledAt: scheduledAt.toISOString(),
         paymentMode,
       }
-      const remote = user.authProvider === 'google' || user.authProvider === 'demo'
       let booking
       if (paymentMode === 'online') {
         if (!remote) throw new Error('Online payments require an authenticated MAY5 account.')
@@ -134,6 +149,9 @@ export function NewBookingPage() {
       <p>
         {service.name} at {salonRef.name}
       </p>
+      {salonRef.demoListing && remote && (
+        <p className="may5-tag" role="status">Sample listing — live bookings are not available.</p>
+      )}
       {pref === 'home' && service.homeService && (
         <p className="may5-tag">At-home service selected</p>
       )}
@@ -154,6 +172,7 @@ export function NewBookingPage() {
           type="datetime-local"
           className="may5-input"
           value={when}
+          min={localDateTimeMinimum()}
           onChange={(e) => setWhen(e.target.value)}
           style={{ marginBottom: 12 }}
           required
@@ -179,7 +198,7 @@ export function NewBookingPage() {
           )}
         </div>
 
-        <button type="submit" className="may5-btn may5-btn-primary" style={{ width: '100%' }} disabled={saving}>
+        <button type="submit" className="may5-btn may5-btn-primary" style={{ width: '100%' }} disabled={saving || (remote && Boolean(salonRef.demoListing))}>
           {saving ? (paymentMode === 'online' ? 'Opening secure checkout…' : 'Saving booking…') : paymentMode === 'online' ? 'Continue to payment' : 'Confirm booking'}
         </button>
         {error && <p role="alert" style={{ color: 'var(--may5-danger)' }}>{error}</p>}

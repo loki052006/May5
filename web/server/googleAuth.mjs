@@ -86,7 +86,7 @@ function toBusinessProfile(user) {
         ...Object.keys(emptyBusinessProfile).map((key) => [key, user[key] ?? '']),
       ],
     ),
-    openingDays: Array.isArray(user.openingDays) ? user.openingDays : [1, 2, 3, 4, 5, 6],
+    openingDays: Array.isArray(user.openingDays) ? user.openingDays : [],
     amenities: Array.isArray(user.amenities) ? user.amenities : [],
     lat: Number.isFinite(user.lat) ? user.lat : null,
     lng: Number.isFinite(user.lng) ? user.lng : null,
@@ -974,16 +974,20 @@ app.post('/api/payments/razorpay/order', async (req, res) => {
       return
     }
     const { salonId, serviceId, staffId, scheduledAt } = req.body ?? {}
-    if (
-      typeof salonId !== 'string' ||
-      typeof serviceId !== 'string' ||
-      !ObjectId.isValid(serviceId) ||
-      (staffId !== undefined && (typeof staffId !== 'string' || staffId.length > 120)) ||
-      typeof scheduledAt !== 'string' ||
-      !Number.isFinite(Date.parse(scheduledAt)) ||
-      Date.parse(scheduledAt) <= Date.now()
-    ) {
-      res.status(400).json({ error: 'Enter valid future appointment details' })
+    if (typeof salonId !== 'string' || !salonId.trim()) {
+      res.status(400).json({ error: 'Choose a valid business' })
+      return
+    }
+    if (typeof serviceId !== 'string' || !ObjectId.isValid(serviceId)) {
+      res.status(400).json({ error: 'Choose a service from a live business listing' })
+      return
+    }
+    if (staffId !== undefined && (typeof staffId !== 'string' || staffId.length > 120)) {
+      res.status(400).json({ error: 'Choose a valid staff member' })
+      return
+    }
+    if (typeof scheduledAt !== 'string' || !Number.isFinite(Date.parse(scheduledAt)) || Date.parse(scheduledAt) <= Date.now()) {
+      res.status(400).json({ error: 'Choose a future appointment date and time' })
       return
     }
     const [vendor, service] = await Promise.all([
@@ -1175,17 +1179,24 @@ app.post('/api/bookings', async (req, res) => {
       return
     }
     const { salonId, serviceId, staffId, scheduledAt, paymentMode } = req.body ?? {}
-    if (
-      typeof salonId !== 'string' ||
-      typeof serviceId !== 'string' ||
-      !ObjectId.isValid(serviceId) ||
-      (staffId !== undefined && typeof staffId !== 'string') ||
-      typeof scheduledAt !== 'string' ||
-      !Number.isFinite(Date.parse(scheduledAt)) ||
-      Date.parse(scheduledAt) <= Date.now() ||
-      paymentMode !== 'offline'
-    ) {
-      res.status(400).json({ error: 'Invalid booking details. Online bookings must be paid through checkout.' })
+    if (typeof salonId !== 'string' || !salonId.trim()) {
+      res.status(400).json({ error: 'Choose a valid business' })
+      return
+    }
+    if (typeof serviceId !== 'string' || !ObjectId.isValid(serviceId)) {
+      res.status(400).json({ error: 'Choose a service from a live business listing' })
+      return
+    }
+    if (staffId !== undefined && typeof staffId !== 'string') {
+      res.status(400).json({ error: 'Choose a valid staff member' })
+      return
+    }
+    if (typeof scheduledAt !== 'string' || !Number.isFinite(Date.parse(scheduledAt)) || Date.parse(scheduledAt) <= Date.now()) {
+      res.status(400).json({ error: 'Choose a future appointment date and time' })
+      return
+    }
+    if (paymentMode !== 'offline') {
+      res.status(400).json({ error: 'Online bookings must be paid through checkout' })
       return
     }
     const [vendor, service] = await Promise.all([
@@ -1413,18 +1424,17 @@ app.patch('/api/vendor/profile', async (req, res) => {
       }
       fields[key] = normalized
     }
-    if (profile.openingDays !== undefined) {
-      if (
-        !Array.isArray(profile.openingDays) ||
-        profile.openingDays.length > 7 ||
-        profile.openingDays.some((day) => !Number.isInteger(day) || day < 0 || day > 6) ||
-        new Set(profile.openingDays).size !== profile.openingDays.length
-      ) {
-        res.status(400).json({ error: 'Choose valid opening days' })
-        return
-      }
-      fields.openingDays = profile.openingDays
+    if (
+      !Array.isArray(profile.openingDays) ||
+      profile.openingDays.length === 0 ||
+      profile.openingDays.length > 7 ||
+      profile.openingDays.some((day) => !Number.isInteger(day) || day < 0 || day > 6) ||
+      new Set(profile.openingDays).size !== profile.openingDays.length
+    ) {
+      res.status(400).json({ error: 'Select at least one valid opening day' })
+      return
     }
+    fields.openingDays = profile.openingDays
     if (profile.amenities !== undefined) {
       if (
         !Array.isArray(profile.amenities) ||
@@ -1482,6 +1492,14 @@ app.patch('/api/vendor/profile', async (req, res) => {
     }
     if (fields.website && !/^https?:\/\/[^\s/$.?#].[^\s]*$/i.test(fields.website)) {
       res.status(400).json({ error: 'Website must start with http:// or https://' })
+      return
+    }
+    if (
+      !/^([01]\d|2[0-3]):[0-5]\d$/.test(fields.openingTime ?? '') ||
+      !/^([01]\d|2[0-3]):[0-5]\d$/.test(fields.closingTime ?? '') ||
+      fields.closingTime <= fields.openingTime
+    ) {
+      res.status(400).json({ error: 'Choose valid opening and closing times; closing must be later than opening' })
       return
     }
     if (!Object.keys(fields).length) {

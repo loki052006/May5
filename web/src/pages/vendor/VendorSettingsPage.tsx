@@ -24,9 +24,9 @@ const emptyProfile: VendorBusinessProfile = {
   email: '',
   website: '',
   openingHours: '',
-  openingDays: [1, 2, 3, 4, 5, 6],
-  openingTime: '09:00',
-  closingTime: '18:00',
+  openingDays: [],
+  openingTime: '',
+  closingTime: '',
   amenities: [],
   shopPhoto: '',
   targetAudience: 'unisex',
@@ -194,6 +194,14 @@ export function VendorSettingsPage() {
     event.preventDefault()
     setProfileError('')
     setProfileSaved(false)
+    if (profile.openingDays.length === 0) {
+      setProfileError('Select at least one day your business is open.')
+      return
+    }
+    if (!profile.openingTime || !profile.closingTime || profile.closingTime <= profile.openingTime) {
+      setProfileError('Choose an opening time and a later closing time.')
+      return
+    }
     setProfileSaving(true)
     try {
       const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -258,11 +266,13 @@ export function VendorSettingsPage() {
 
   return (
     <>
-      <h1>Settings</h1>
+      <h1>{profile.id ? 'Settings' : 'Complete your business registration'}</h1>
       <section className="may5-card" style={{ padding: 16, marginTop: 16 }}>
-        <h2>Business profile</h2>
+        <h2>{profile.id ? 'Business profile' : 'Business registration'}</h2>
         <p style={{ color: 'var(--may5-muted)' }}>
-          These verified-by-you details and your service menu are shown to customers on your MAY5 listing.
+          {profile.id
+            ? 'These verified-by-you details and your service menu are shown to customers on your MAY5 listing.'
+            : 'Add your business details, choose the days you are open, and set your opening and closing times to finish registering.'}
         </p>
         {profileLoading ? <p role="status">Loading business details…</p> : (
           <form onSubmit={saveProfile} style={{ display: 'grid', gap: 10 }}>
@@ -302,10 +312,9 @@ export function VendorSettingsPage() {
             <input id="business-email" className="may5-input" type="email" value={profile.email} onChange={(event) => setProfile({ ...profile, email: event.target.value })} maxLength={240} />
             <label htmlFor="business-website">Website (optional)</label>
             <input id="business-website" className="may5-input" type="url" value={profile.website} onChange={(event) => setProfile({ ...profile, website: event.target.value })} placeholder="https://example.com" maxLength={240} />
-            <label htmlFor="business-hours">Opening hours</label>
-            <input id="business-hours" className="may5-input" value={profile.openingHours} onChange={(event) => setProfile({ ...profile, openingHours: event.target.value })} placeholder="Mon–Sat, 10:00 AM–8:00 PM" maxLength={240} />
             <fieldset style={{ border: 0, padding: 0, display: 'grid', gap: 8 }}>
               <legend>Opening days</legend>
+              <small style={{ color: 'var(--may5-muted)' }}>Select every day your business is open.</small>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                 {weekdays.map((day, index) => (
                   <label key={day} className="may5-tag" style={{ cursor: 'pointer' }}>
@@ -324,8 +333,8 @@ export function VendorSettingsPage() {
               </div>
             </fieldset>
             <div className="business-coordinate-row">
-              <label htmlFor="business-opening-time">Opening time<input id="business-opening-time" className="may5-input" type="time" value={profile.openingTime} onChange={(event) => setProfile({ ...profile, openingTime: event.target.value })} /></label>
-              <label htmlFor="business-closing-time">Closing time<input id="business-closing-time" className="may5-input" type="time" value={profile.closingTime} onChange={(event) => setProfile({ ...profile, closingTime: event.target.value })} /></label>
+              <label htmlFor="business-opening-time">Opening time<input id="business-opening-time" className="may5-input" type="time" value={profile.openingTime} onChange={(event) => setProfile({ ...profile, openingTime: event.target.value })} required /></label>
+              <label htmlFor="business-closing-time">Closing time<input id="business-closing-time" className="may5-input" type="time" value={profile.closingTime} onChange={(event) => setProfile({ ...profile, closingTime: event.target.value })} required /></label>
             </div>
             <label htmlFor="business-audience">Who can book services?</label>
             <select id="business-audience" className="may5-input" value={profile.targetAudience} onChange={(event) => setProfile({ ...profile, targetAudience: event.target.value as VendorBusinessProfile['targetAudience'] })}>
@@ -361,9 +370,9 @@ export function VendorSettingsPage() {
             </div>
             <button type="button" className="may5-btn may5-btn-secondary" onClick={captureBusinessLocation}>Use this device location</button>
             {profileError && <p role="alert" style={{ color: 'var(--may5-danger)', margin: 0 }}>{profileError}</p>}
-            {profileSaved && <p role="status" style={{ color: 'var(--may5-success)', margin: 0 }}>Business details saved. Your listing is visible to customers.</p>}
+            {profileSaved && <p role="status" style={{ color: 'var(--may5-success)', margin: 0 }}>{profile.id ? 'Business details saved. Your listing is visible to customers.' : 'Business registration complete. Your listing is visible to customers.'}</p>}
             <button type="submit" className="may5-btn may5-btn-primary" disabled={profileSaving}>
-              {profileSaving ? 'Saving…' : 'Save business profile'}
+              {profileSaving ? 'Saving…' : profile.id ? 'Save business profile' : 'Register business'}
             </button>
           </form>
         )}
