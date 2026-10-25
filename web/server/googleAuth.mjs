@@ -1,5 +1,5 @@
 import cors from 'cors'
-import { createHash, randomBytes } from 'node:crypto'
+import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
 import { resolve } from 'node:path'
 import 'dotenv/config'
 import express from 'express'
@@ -30,6 +30,7 @@ const sessionDurationMs = 30 * 24 * 60 * 60 * 1000
 let users
 let sessions
 let bookings
+let paymentOrders
 let vendorServices
 let vendorStaff
 let vendorBranches
@@ -93,7 +94,12 @@ function toBusinessProfile(user) {
 }
 
 app.use(cors({ origin: true }))
-app.use(express.json({ limit: '8mb' }))
+app.use(express.json({
+  limit: '8mb',
+  verify: (req, _res, body) => {
+    req.rawBody = Buffer.from(body)
+  },
+}))
 app.use((req, res, next) => {
   if (req.path.startsWith('/api/') && req.path !== '/api/health' && !databaseAvailable) {
     res.status(503).json({
@@ -116,6 +122,102 @@ function readSessionToken(req) {
 
 function hashToken(token) {
   return createHash('sha256').update(token).digest('hex')
+}
+
+async function razorpayRequest(path, options = {}) {
+  const keyId = process.env.RAZORPAY_KEY_ID
+  const keySecret = process.env.RAZORPAY_KEY_SECRET
+  if (!keyId || !keySecret) {
+    const err = new Error('Online payments are not configured')
+    err.status = 503
+    throw err
+  }
+
+  const response = await fetch(`https://api.razorpay.com/v1${path}`, {
+    ...options,
+    headers: {
+      Authorization: `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString('base64')}`,
+      ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+      ...options.headers,
+    },
+    signal: AbortSignal.timeout(15000),
+  })
+  const result = await response.json().catch(() => ({}))
+  if (!response.ok) {
+    const err = new Error(result.error?.description ?? 'Payment provider request failed')
+    err.status = response.status === 429 ? 503 : 502
+    throw err
+  }
+  return result
+}
+
+async function recordCapturedPayment(order, payment) {
+  const existingBooking = await bookings.findOne({
+    paymentOrderId: order.razorpayOrderId,
+    customerId: order.userId,
+  })
+  if (existingBooking) {
+    await paymentOrders.updateOne(
+      { _id: order._id },
+      { $set: { status: 'paid', paymentId: payment.id, bookingId: existingBooking._id, paidAt: new Date() } },
+    )
+    return { ...existingBooking, id: existingBooking._id.toString() }
+  }
+
+  const booking = {
+    salonId: order.salonId,
+    serviceId: order.serviceId,
+    ...(order.staffId ? { staffId: order.staffId } : {}),
+    customerId: order.userId,
+    status: order.requiresApproval ? 'pending' : 'scheduled',
+    scheduledAt: order.scheduledAt,
+    paymentMode: 'online',
+    paymentStatus: 'paid',
+    paymentId: payment.id,
+    paymentOrderId: order.razorpayOrderId,
+    amountPaid: order.amount,
+    mediaAuthorized: false,
+    mediaUrls: [],
+    createdAt: new Date(),
+  }
+  let inserted
+  try {
+    inserted = await bookings.insertOne(booking)
+  } catch (err) {
+    if (err.code !== 11000) throw err
+    const duplicate = await bookings.findOne({
+      paymentOrderId: order.razorpayOrderId,
+      customerId: order.userId,
+    })
+    if (!duplicate) throw err
+    await paymentOrders.updateOne(
+      { _id: order._id },
+      { $set: { status: 'paid', paymentId: payment.id, bookingId: duplicate._id, paidAt: new Date() } },
+    )
+    return { ...duplicate, id: duplicate._id.toString() }
+  }
+  await paymentOrders.updateOne(
+    { _id: order._id },
+    { $set: { status: 'paid', paymentId: payment.id, bookingId: inserted.insertedId, paidAt: new Date() } },
+  )
+
+  const user = await users.findOne({ googleId: order.userId })
+  if (user) {
+    try {
+      await createCustomerNotification(
+        user,
+        'booking_confirmation',
+        booking.status === 'pending' ? 'Booking request paid' : 'Booking confirmed',
+        booking.status === 'pending'
+          ? `Your paid appointment request for ${new Date(booking.scheduledAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} is awaiting business approval.`
+          : `Your paid appointment is scheduled for ${new Date(booking.scheduledAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}.`,
+        '/customer/bookings',
+      )
+    } catch (err) {
+      console.error('Payment succeeded, but booking confirmation notification failed:', err)
+    }
+  }
+  return { ...booking, id: inserted.insertedId.toString() }
 }
 
 function setSessionCookie(res, token) {
@@ -183,6 +285,15 @@ app.post('/api/auth/demo-otp', async (req, res) => {
 
   if (!/^[6-9]\d{9}$/.test(nationalNumber) || code !== '123456') {
     res.status(401).json({ error: 'Invalid Indian mobile number or demo OTP' })
+    return
+  }
+  const duplicateBooking = await bookings.findOne({ paymentOrderId: orderId, customerId: user.googleId })
+  if (duplicateBooking) {
+    await paymentOrders.updateOne(
+      { _id: order._id },
+      { $set: { status: 'paid', paymentId, bookingId: duplicateBooking._id, paidAt: new Date() } },
+    )
+    res.json({ ...duplicateBooking, id: duplicateBooking._id.toString() })
     return
   }
   if (!normalizedName || normalizedName.length > 80) {
@@ -552,7 +663,7 @@ app.post('/api/push/test', async (req, res) => {
       res.status(401).json({ error: 'Authentication required' })
       return
     }
-    if (user.role !== 'customer') {
+    if ((user.role ?? 'customer') !== 'customer') {
       res.status(403).json({ error: 'Customer account required' })
       return
     }
@@ -589,7 +700,7 @@ app.post('/api/push/subscriptions', async (req, res) => {
       res.status(401).json({ error: 'Authentication required' })
       return
     }
-    if (user.role !== 'customer') {
+    if ((user.role ?? 'customer') !== 'customer') {
       res.status(403).json({ error: 'Customer account required' })
       return
     }
@@ -851,54 +962,263 @@ app.patch('/api/favorites', async (req, res) => {
   }
 })
 
-app.post('/api/bookings', async (req, res) => {
-  let user
+app.post('/api/payments/razorpay/order', async (req, res) => {
   try {
-    user = await authenticatedUser(req)
-  } catch (err) {
-    console.error('Could not authenticate booking request:', err)
-    res.status(500).json({ error: 'Could not create booking' })
-    return
-  }
-  if (!user) {
-    res.status(401).json({ error: 'Authentication required' })
-    return
-  }
-
-  const { salonId, serviceId, staffId, scheduledAt, paymentMode } = req.body ?? {}
-  if (
-    typeof salonId !== 'string' ||
-    typeof serviceId !== 'string' ||
-    (staffId !== undefined && typeof staffId !== 'string') ||
-    typeof scheduledAt !== 'string' ||
-    !Number.isFinite(Date.parse(scheduledAt)) ||
-    !['online', 'offline'].includes(paymentMode)
-  ) {
-    res.status(400).json({ error: 'Invalid booking details' })
-    return
-  }
-
-  const booking = {
-    salonId,
-    serviceId,
-    ...(staffId ? { staffId } : {}),
-    customerId: user.googleId,
-    status: 'scheduled',
-    scheduledAt: new Date(scheduledAt).toISOString(),
-    paymentMode,
-    mediaAuthorized: false,
-    mediaUrls: [],
-    createdAt: new Date(),
-  }
-
-  try {
-    const vendor = await users.findOne({ role: 'vendor', businessId: salonId })
+    const user = await authenticatedUser(req)
+    if (!user) {
+      res.status(401).json({ error: 'Authentication required' })
+      return
+    }
+    if (user.role !== 'customer') {
+      res.status(403).json({ error: 'Customer account required' })
+      return
+    }
+    const { salonId, serviceId, staffId, scheduledAt } = req.body ?? {}
+    if (
+      typeof salonId !== 'string' ||
+      typeof serviceId !== 'string' ||
+      !ObjectId.isValid(serviceId) ||
+      (staffId !== undefined && (typeof staffId !== 'string' || staffId.length > 120)) ||
+      typeof scheduledAt !== 'string' ||
+      !Number.isFinite(Date.parse(scheduledAt)) ||
+      Date.parse(scheduledAt) <= Date.now()
+    ) {
+      res.status(400).json({ error: 'Enter valid future appointment details' })
+      return
+    }
+    const [vendor, service] = await Promise.all([
+      users.findOne({ role: 'vendor', businessId: salonId }),
+      vendorServices.findOne({
+        _id: new ObjectId(serviceId),
+        salonId,
+        active: { $ne: false },
+      }),
+    ])
+    if (!vendor || !service) {
+      res.status(404).json({ error: 'The selected business or service is unavailable' })
+      return
+    }
+    if (vendor.vendorPreferences?.booking?.advancePaymentRequired && !service.price) {
+      res.status(400).json({ error: 'This appointment cannot be paid online' })
+      return
+    }
+    const amount = Math.round(service.price * 100)
+    if (!Number.isSafeInteger(amount) || amount < 100 || amount > 100_000_000) {
+      res.status(400).json({ error: 'Service price is outside the supported payment range' })
+      return
+    }
     const preferences = {
       ...defaultVendorPreferences.booking,
-      ...(vendor?.vendorPreferences?.booking ?? {}),
+      ...(vendor.vendorPreferences?.booking ?? {}),
     }
-    if (!preferences.acceptInstantBooking || preferences.requiresApproval) {
-      booking.status = 'pending'
+
+    const receipt = `m5${randomBytes(18).toString('hex')}`
+    const order = await razorpayRequest('/orders', {
+      method: 'POST',
+      body: JSON.stringify({
+        amount,
+        currency: 'INR',
+        receipt,
+        notes: { serviceId, salonId, customerId: user.googleId },
+      }),
+    })
+    await paymentOrders.insertOne({
+      razorpayOrderId: order.id,
+      userId: user.googleId,
+      salonId,
+      serviceId,
+      ...(staffId ? { staffId } : {}),
+      scheduledAt: new Date(scheduledAt).toISOString(),
+      serviceName: service.name,
+      amount,
+      currency: 'INR',
+      requiresApproval: !preferences.acceptInstantBooking || preferences.requiresApproval,
+      status: 'created',
+      createdAt: new Date(),
+    })
+    res.status(201).json({
+      orderId: order.id,
+      amount: order.amount,
+      currency: order.currency,
+      keyId: process.env.RAZORPAY_KEY_ID,
+      businessName: vendor.businessName,
+      serviceName: service.name,
+      customerName: user.fullName ?? '',
+      customerEmail: user.email ?? '',
+      customerPhone: user.phone ?? '',
+    })
+  } catch (err) {
+    console.error('Could not create Razorpay payment order:', err)
+    res.status(err.status ?? 502).json({ error: err.message ?? 'Could not start online payment' })
+  }
+})
+
+app.post('/api/payments/razorpay/webhook', async (req, res) => {
+  const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET
+  const signature = req.headers['x-razorpay-signature']
+  if (!webhookSecret || typeof signature !== 'string' || !Buffer.isBuffer(req.rawBody)) {
+    res.status(503).json({ error: 'Payment webhook verification is not configured' })
+    return
+  }
+  const expected = createHmac('sha256', webhookSecret).update(req.rawBody).digest()
+  const actual = /^[a-f0-9]{64}$/i.test(signature) ? Buffer.from(signature, 'hex') : Buffer.alloc(0)
+  if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) {
+    res.status(401).json({ error: 'Invalid payment webhook signature' })
+    return
+  }
+  if (req.body?.event !== 'payment.captured') {
+    res.status(200).json({ received: true })
+    return
+  }
+  try {
+    const payment = req.body?.payload?.payment?.entity
+    if (
+      !payment ||
+      typeof payment.order_id !== 'string' ||
+      typeof payment.id !== 'string' ||
+      !Number.isSafeInteger(payment.amount) ||
+      payment.status !== 'captured'
+    ) {
+      res.status(400).json({ error: 'Invalid captured-payment event' })
+      return
+    }
+    const order = await paymentOrders.findOne({ razorpayOrderId: payment.order_id })
+    if (!order) {
+      console.warn('Received a captured payment for an unknown Razorpay order.')
+      res.status(200).json({ received: true })
+      return
+    }
+    if (payment.amount !== order.amount || payment.currency !== order.currency) {
+      res.status(400).json({ error: 'Captured payment does not match its order' })
+      return
+    }
+    await recordCapturedPayment(order, payment)
+    res.status(200).json({ received: true })
+  } catch (err) {
+    console.error('Could not process captured-payment webhook:', err)
+    res.status(500).json({ error: 'Could not process captured payment' })
+  }
+})
+
+app.post('/api/payments/razorpay/verify', async (req, res) => {
+  try {
+    const user = await authenticatedUser(req)
+    if (!user) {
+      res.status(401).json({ error: 'Authentication required' })
+      return
+    }
+    const { razorpay_order_id: orderId, razorpay_payment_id: paymentId, razorpay_signature: signature } = req.body ?? {}
+    if (
+      typeof orderId !== 'string' ||
+      typeof paymentId !== 'string' ||
+      typeof signature !== 'string' ||
+      !/^[a-f0-9]{64}$/i.test(signature)
+    ) {
+      res.status(400).json({ error: 'Invalid payment verification details' })
+      return
+    }
+    const order = await paymentOrders.findOne({ razorpayOrderId: orderId, userId: user.googleId })
+    if (!order) {
+      res.status(404).json({ error: 'Payment order not found' })
+      return
+    }
+    if (order.status === 'paid' && order.bookingId) {
+      const existingBooking = await bookings.findOne({ _id: order.bookingId, customerId: user.googleId })
+      if (!existingBooking) {
+        res.status(409).json({ error: 'Payment was received, but its booking needs support assistance' })
+        return
+      }
+      res.json({ ...existingBooking, id: existingBooking._id.toString() })
+      return
+    }
+    const keySecret = process.env.RAZORPAY_KEY_SECRET
+    if (!keySecret) {
+      res.status(503).json({ error: 'Online payments are not configured' })
+      return
+    }
+    const expected = createHmac('sha256', keySecret)
+      .update(`${orderId}|${paymentId}`)
+      .digest()
+    const actual = Buffer.from(signature, 'hex')
+    if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) {
+      res.status(400).json({ error: 'Payment signature verification failed' })
+      return
+    }
+
+    const payment = await razorpayRequest(`/payments/${encodeURIComponent(paymentId)}`)
+    if (
+      payment.order_id !== orderId ||
+      payment.status !== 'captured' ||
+      payment.amount !== order.amount ||
+      payment.currency !== order.currency
+    ) {
+      res.status(402).json({ error: 'Payment has not been captured for this appointment' })
+      return
+    }
+    const booking = await recordCapturedPayment(order, payment)
+    res.status(201).json(booking)
+  } catch (err) {
+    console.error('Could not verify Razorpay payment:', err)
+    res.status(err.status ?? 500).json({ error: err.message ?? 'Could not verify payment' })
+  }
+})
+
+app.post('/api/bookings', async (req, res) => {
+  try {
+    const user = await authenticatedUser(req)
+    if (!user) {
+      res.status(401).json({ error: 'Authentication required' })
+      return
+    }
+    if (user.role !== 'customer') {
+      res.status(403).json({ error: 'Customer account required' })
+      return
+    }
+    const { salonId, serviceId, staffId, scheduledAt, paymentMode } = req.body ?? {}
+    if (
+      typeof salonId !== 'string' ||
+      typeof serviceId !== 'string' ||
+      !ObjectId.isValid(serviceId) ||
+      (staffId !== undefined && typeof staffId !== 'string') ||
+      typeof scheduledAt !== 'string' ||
+      !Number.isFinite(Date.parse(scheduledAt)) ||
+      Date.parse(scheduledAt) <= Date.now() ||
+      paymentMode !== 'offline'
+    ) {
+      res.status(400).json({ error: 'Invalid booking details. Online bookings must be paid through checkout.' })
+      return
+    }
+    const [vendor, service] = await Promise.all([
+      users.findOne({ role: 'vendor', businessId: salonId }),
+      vendorServices.findOne({
+        _id: new ObjectId(serviceId),
+        salonId,
+        active: { $ne: false },
+      }),
+    ])
+    if (!vendor || !service) {
+      res.status(404).json({ error: 'The selected business or service is unavailable' })
+      return
+    }
+    if (vendor.vendorPreferences?.booking?.advancePaymentRequired) {
+      res.status(400).json({ error: 'This business requires online payment for bookings' })
+      return
+    }
+    const preferences = {
+      ...defaultVendorPreferences.booking,
+      ...(vendor.vendorPreferences?.booking ?? {}),
+    }
+    const booking = {
+      salonId,
+      serviceId,
+      ...(staffId ? { staffId } : {}),
+      customerId: user.googleId,
+      status: !preferences.acceptInstantBooking || preferences.requiresApproval ? 'pending' : 'scheduled',
+      scheduledAt: new Date(scheduledAt).toISOString(),
+      paymentMode,
+      mediaAuthorized: false,
+      mediaUrls: [],
+      createdAt: new Date(),
     }
     const result = await bookings.insertOne(booking)
     await createCustomerNotification(
@@ -910,9 +1230,9 @@ app.post('/api/bookings', async (req, res) => {
         : `Your appointment is scheduled for ${new Date(booking.scheduledAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}.`,
       '/customer/bookings',
     )
-    res.status(201).json({ ...booking, id: result.insertedId })
+    res.status(201).json({ ...booking, id: result.insertedId.toString() })
   } catch (err) {
-    console.error('MongoDB booking save failed:', err)
+    console.error('Could not save booking:', err)
     res.status(500).json({ error: 'Could not save booking' })
   }
 })
@@ -937,6 +1257,7 @@ app.get('/api/catalog', async (_req, res) => {
         email: 1,
         website: 1,
         openingHours: 1,
+        vendorPreferences: 1,
         locality: 1,
         city: 1,
         state: 1,
@@ -1025,6 +1346,7 @@ app.get('/api/catalog', async (_req, res) => {
         website: record.website,
         openingHours: record.openingHours,
         amenities: record.amenities ?? [],
+        advancePaymentRequired: record.vendorPreferences?.booking?.advancePaymentRequired === true,
         packages: vendorContent.packages,
         portfolio: vendorContent.portfolio,
         openingDays: record.openingDays ?? [],
@@ -2115,6 +2437,7 @@ async function start() {
     users = database.collection('users')
     sessions = database.collection('sessions')
     bookings = database.collection('bookings')
+    paymentOrders = database.collection('paymentOrders')
     vendorServices = database.collection('vendorServices')
     vendorStaff = database.collection('vendorStaff')
     vendorBranches = database.collection('vendorBranches')
@@ -2150,6 +2473,9 @@ async function start() {
     await sessions.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 })
     await sessions.createIndex({ userId: 1 })
     await bookings.createIndex({ customerId: 1, scheduledAt: -1 })
+    await bookings.createIndex({ paymentOrderId: 1 }, { unique: true, sparse: true })
+    await paymentOrders.createIndex({ razorpayOrderId: 1 }, { unique: true })
+    await paymentOrders.createIndex({ userId: 1, createdAt: -1 })
     await vendorServices.createIndex({ vendorId: 1, createdAt: -1 })
     await vendorStaff.createIndex({ vendorId: 1, createdAt: -1 })
     await vendorBranches.createIndex({ vendorId: 1, createdAt: 1 })

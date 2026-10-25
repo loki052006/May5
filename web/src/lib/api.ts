@@ -142,6 +142,40 @@ export function createGoogleBooking(
   })
 }
 
+export interface RazorpayOrder {
+  orderId: string
+  amount: number
+  currency: string
+  keyId: string
+  businessName: string
+  serviceName: string
+  customerName: string
+  customerEmail: string
+  customerPhone: string
+}
+
+export interface RazorpayPaymentResponse {
+  razorpay_order_id: string
+  razorpay_payment_id: string
+  razorpay_signature: string
+}
+
+export function createRazorpayOrder(
+  booking: Pick<Booking, 'salonId' | 'serviceId' | 'staffId' | 'scheduledAt'>,
+): Promise<RazorpayOrder> {
+  return request<RazorpayOrder>('/api/payments/razorpay/order', {
+    method: 'POST',
+    body: JSON.stringify(booking),
+  })
+}
+
+export function verifyRazorpayPayment(payment: RazorpayPaymentResponse): Promise<Booking> {
+  return request<Booking>('/api/payments/razorpay/verify', {
+    method: 'POST',
+    body: JSON.stringify(payment),
+  })
+}
+
 export type VendorService = ServiceItem & { id: string; active: boolean }
 
 export interface PublicCatalog {

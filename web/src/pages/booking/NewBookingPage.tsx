@@ -3,9 +3,46 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { staff } from '../../lib/mockData'
 import { store, getState } from '../../lib/store'
 import { useAuth } from '../../lib/auth'
-import { createGoogleBooking } from '../../lib/api'
+import { createGoogleBooking, createRazorpayOrder, verifyRazorpayPayment } from '../../lib/api'
 import type { PaymentMode } from '../../lib/types'
 import { usePublicCatalog } from '../../lib/usePublicCatalog'
+
+interface RazorpayCheckoutResponse {
+  razorpay_order_id: string
+  razorpay_payment_id: string
+  razorpay_signature: string
+}
+
+interface RazorpayCheckoutOptions {
+  key: string
+  amount: number
+  currency: string
+  name: string
+  description: string
+  order_id: string
+  prefill: { name: string; email: string; contact: string }
+  handler: (response: RazorpayCheckoutResponse) => void
+  modal: { ondismiss: () => void }
+  theme: { color: string }
+}
+
+declare global {
+  interface Window {
+    Razorpay?: new (options: RazorpayCheckoutOptions) => { open: () => void }
+  }
+}
+
+function loadRazorpayCheckout() {
+  if (window.Razorpay) return Promise.resolve()
+  return new Promise<void>((resolve, reject) => {
+    const script = document.createElement('script')
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js'
+    script.async = true
+    script.onload = () => window.Razorpay ? resolve() : reject(new Error('Payment checkout could not be initialized.'))
+    script.onerror = () => reject(new Error('Could not load Razorpay checkout. Check your connection and try again.'))
+    document.head.appendChild(script)
+  })
+}
 
 export function NewBookingPage() {
   const { serviceId } = useParams()
@@ -43,17 +80,45 @@ export function NewBookingPage() {
         scheduledAt: new Date(when).toISOString(),
         paymentMode,
       }
-      const booking =
-        user.authProvider === 'google' || user.authProvider === 'demo'
-          ? await createGoogleBooking(bookingDetails)
-          : {
-              id: `bk-${Date.now()}`,
-              customerId: user.id,
-              ...bookingDetails,
-              status: 'scheduled' as const,
-              mediaAuthorized: false,
-              mediaUrls: [],
-            }
+      const remote = user.authProvider === 'google' || user.authProvider === 'demo'
+      let booking
+      if (paymentMode === 'online') {
+        if (!remote) throw new Error('Online payments require an authenticated MAY5 account.')
+        const order = await createRazorpayOrder(bookingDetails)
+        await loadRazorpayCheckout()
+        if (!window.Razorpay) throw new Error('Payment checkout is unavailable. Please try again.')
+        const payment = await new Promise<RazorpayCheckoutResponse>((resolve, reject) => {
+          const checkout = new window.Razorpay!({
+            key: order.keyId,
+            amount: order.amount,
+            currency: order.currency,
+            name: order.businessName || 'MAY5',
+            description: `${order.serviceName} appointment`,
+            order_id: order.orderId,
+            prefill: {
+              name: order.customerName,
+              email: order.customerEmail,
+              contact: order.customerPhone,
+            },
+            handler: resolve,
+            modal: { ondismiss: () => reject(new Error('Payment cancelled. You can try again.')) },
+            theme: { color: '#c67139' },
+          })
+          checkout.open()
+        })
+        booking = await verifyRazorpayPayment(payment)
+      } else if (remote) {
+        booking = await createGoogleBooking(bookingDetails)
+      } else {
+        booking = {
+          id: `bk-${Date.now()}`,
+          customerId: user.id,
+          ...bookingDetails,
+          status: 'scheduled' as const,
+          mediaAuthorized: false,
+          mediaUrls: [],
+        }
+      }
       store.addBooking(booking)
       navigate('/customer/bookings')
     } catch (err) {
@@ -94,26 +159,28 @@ export function NewBookingPage() {
           required
         />
 
-        <label>Payment</label>
+        <label>{salonRef.advancePaymentRequired ? 'Online payment required' : 'Payment'}</label>
         <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
           <button
             type="button"
             className={`may5-chip ${paymentMode === 'online' ? 'active' : ''}`}
             onClick={() => setPaymentMode('online')}
           >
-            Accept online payment
+            Pay online
           </button>
-          <button
-            type="button"
-            className={`may5-chip ${paymentMode === 'offline' ? 'active' : ''}`}
-            onClick={() => setPaymentMode('offline')}
-          >
-            Pay at salon
-          </button>
+          {!salonRef.advancePaymentRequired && (
+            <button
+              type="button"
+              className={`may5-chip ${paymentMode === 'offline' ? 'active' : ''}`}
+              onClick={() => setPaymentMode('offline')}
+            >
+              Pay at salon
+            </button>
+          )}
         </div>
 
         <button type="submit" className="may5-btn may5-btn-primary" style={{ width: '100%' }} disabled={saving}>
-          {saving ? 'Saving…' : 'Confirm booking'}
+          {saving ? (paymentMode === 'online' ? 'Opening secure checkout…' : 'Saving booking…') : paymentMode === 'online' ? 'Continue to payment' : 'Confirm booking'}
         </button>
         {error && <p role="alert" style={{ color: 'var(--may5-danger)' }}>{error}</p>}
       </form>

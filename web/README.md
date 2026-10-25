@@ -107,3 +107,17 @@ server-side 15-minute scheduler while the service is running. `PUSH_CONTACT_EMAI
 is optional and should be set to a monitored contact email for production.
 Customers can send a test notification from the same settings page to verify
 browser permission and delivery.
+
+### Online payments
+
+Online service bookings use Razorpay Checkout. Set `RAZORPAY_KEY_ID` and
+`RAZORPAY_KEY_SECRET` as server-only environment variables in the local
+environment and production host; never use a `VITE_` prefix or commit actual
+credentials. Set `RAZORPAY_WEBHOOK_SECRET` separately, configure Razorpay to
+send the `payment.captured` event to `/api/payments/razorpay/webhook`, and
+configure automatic capture for successful Checkout payments. The server
+creates orders from its stored service price, verifies checkout signatures,
+confirms capture, and creates a booking only after payment. The signed webhook
+also handles cases where the customer closes Checkout before returning to MAY5.
+Online payments are stored in `may5.paymentOrders`, with payment and booking
+references recorded for reconciliation.

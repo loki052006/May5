@@ -71,6 +71,7 @@ export interface Salon {
   website?: string
   openingHours?: string
   amenities?: string[]
+  advancePaymentRequired?: boolean
   packages?: Array<{
     id: string
     title: string
