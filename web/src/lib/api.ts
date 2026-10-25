@@ -1,4 +1,4 @@
-import type { Booking, Branch, CustomerNotification, CustomerSettings, Salon, ServiceItem, UserProfile, UserRole, VendorBusinessProfile, VendorStaff } from './types'
+import type { Booking, Branch, CustomerNotification, CustomerSettings, Salon, ServiceItem, UserProfile, UserRole, VendorBooking, VendorBusinessProfile, VendorContent, VendorCustomer, VendorPreferences, VendorStaff } from './types'
 
 export class ApiError extends Error {
   readonly status: number
@@ -142,7 +142,7 @@ export function createGoogleBooking(
   })
 }
 
-export type VendorService = ServiceItem & { id: string }
+export type VendorService = ServiceItem & { id: string; active: boolean }
 
 export interface PublicCatalog {
   salons: Salon[]
@@ -179,6 +179,16 @@ export function createVendorService(
       ...service,
       imageData: service.imageUrl,
     }),
+  })
+}
+
+export function updateVendorService(
+  id: string,
+  patch: Partial<Pick<VendorService, 'name' | 'description' | 'price' | 'durationMin' | 'active'>>,
+): Promise<VendorService> {
+  return request<VendorService>(`/api/vendor/services/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(patch),
   })
 }
 
@@ -231,5 +241,61 @@ export function updateVendorBranch(
   return request<Branch>(`/api/vendor/branches/${encodeURIComponent(id)}`, {
     method: 'PATCH',
     body: JSON.stringify(branch),
+  })
+}
+
+export function loadVendorPreferences(): Promise<VendorPreferences> {
+  return request<VendorPreferences>('/api/vendor/preferences')
+}
+
+export function saveVendorPreferences(preferences: VendorPreferences): Promise<VendorPreferences> {
+  return request<VendorPreferences>('/api/vendor/preferences', {
+    method: 'PATCH',
+    body: JSON.stringify(preferences),
+  })
+}
+
+export function loadVendorContent(kind: VendorContent['kind']): Promise<VendorContent[]> {
+  return request<VendorContent[]>(`/api/vendor/content?kind=${kind}`)
+}
+
+export function createVendorContent(
+  content: Omit<VendorContent, 'id' | 'createdAt'>,
+): Promise<VendorContent> {
+  return request<VendorContent>('/api/vendor/content', {
+    method: 'POST',
+    body: JSON.stringify(content),
+  })
+}
+
+export function updateVendorContent(
+  id: string,
+  patch: Partial<Pick<VendorContent, 'active'>>,
+): Promise<VendorContent> {
+  return request<VendorContent>(`/api/vendor/content/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(patch),
+  })
+}
+
+export function deleteVendorContent(id: string): Promise<void> {
+  return request<void>(`/api/vendor/content/${encodeURIComponent(id)}`, { method: 'DELETE' })
+}
+
+export function loadVendorCustomers(): Promise<VendorCustomer[]> {
+  return request<VendorCustomer[]>('/api/vendor/customers')
+}
+
+export function loadVendorBookings(): Promise<VendorBooking[]> {
+  return request<VendorBooking[]>('/api/vendor/bookings')
+}
+
+export function updateVendorBookingStatus(
+  id: string,
+  status: Booking['status'],
+): Promise<VendorBooking> {
+  return request<VendorBooking>(`/api/vendor/bookings/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status }),
   })
 }

@@ -70,6 +70,20 @@ export interface Salon {
   email?: string
   website?: string
   openingHours?: string
+  amenities?: string[]
+  packages?: Array<{
+    id: string
+    title: string
+    description: string
+    serviceIds: string[]
+    price: number | null
+  }>
+  portfolio?: Array<{
+    id: string
+    title: string
+    description: string
+    imageUrl: string
+  }>
   targetAudience?: 'women' | 'men' | 'unisex'
   demoListing?: boolean
 }
@@ -80,13 +94,71 @@ export interface VendorBusinessProfile {
   businessType: string
   description: string
   address: string
+  locality: string
+  city: string
+  state: string
+  pincode: string
   phone: string
   email: string
   website: string
   openingHours: string
+  openingDays: number[]
+  openingTime: string
+  closingTime: string
+  amenities: string[]
+  shopPhoto: string
   targetAudience: 'women' | 'men' | 'unisex'
   lat: number | null
   lng: number | null
+}
+
+export interface VendorPreferences {
+  booking: {
+    acceptInstantBooking: boolean
+    requiresApproval: boolean
+    advanceBookingRequired: boolean
+    advancePaymentRequired: boolean
+    numberOfSlots: number
+    cancellationPolicy: string
+  }
+  customerManagement: {
+    enableCustomerHistory: boolean
+    enableAppointmentReminders: boolean
+    enablePromotionalMessages: boolean
+    reminderIntervalHours: 2 | 24 | 48 | 'custom'
+    customReminderHours: number
+  }
+}
+
+export interface VendorContent {
+  id: string
+  kind: 'package' | 'portfolio' | 'promotion'
+  title: string
+  description: string
+  imageUrl: string
+  serviceIds: string[]
+  price: number | null
+  discountPercent: number | null
+  startsAt: string
+  endsAt: string
+  active: boolean
+  createdAt: string
+}
+
+export interface VendorCustomer {
+  id: string
+  fullName: string
+  phone: string
+  email: string
+  bookingCount: number
+  lastVisit: string
+}
+
+export interface VendorBooking extends Booking {
+  customerName: string
+  customerPhone: string
+  serviceName: string
+  servicePrice: number
 }
 
 export interface ServiceItem {
@@ -125,7 +197,7 @@ export interface Booking {
   salonId: string
   serviceId: string
   staffId?: string
-  status: 'scheduled' | 'completed' | 'cancelled'
+  status: 'pending' | 'scheduled' | 'completed' | 'cancelled'
   scheduledAt: string
   paymentMode: PaymentMode
   mediaAuthorized: boolean

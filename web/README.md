@@ -48,6 +48,10 @@ project in Render, create a Blueprint from `render.yaml`, and provide
 `MONGODB_URI` as environment variables when prompted. After the service is
 created, add its `onrender.com` origin to the Google OAuth client's authorized
 JavaScript origins. The `/api/health` endpoint is used for Render health checks.
+The server starts even when MongoDB is temporarily unreachable and retries the
+connection every 30 seconds; database-backed API requests return `503` until
+the database is available. A healthy Render deployment still requires a valid
+Atlas connection string and an Atlas network access rule that permits Render.
 
 ## Demo and business services
 
@@ -62,6 +66,24 @@ Business accounts can manage team members from the vendor Staff page: add,
 edit, activate or deactivate, and remove staff records. Staff names, roles,
 salon assignments, and optional Indian mobile numbers and email addresses are
 stored in the `may5.vendorStaff` collection.
+
+### Business operations
+
+Business profiles support storefront photos, full address and map coordinates,
+opening days and hours, amenities, and customer audience settings. Booking and
+customer-management preferences are saved with the vendor profile. When booking
+approval is required, new appointments are created as pending and can be
+approved or declined from the vendor Calendar. Service owners can pause or edit
+their listings; paused services are omitted from the public catalog.
+
+Appointments and their customer/service details power the business dashboard
+and analytics. Customer history can be disabled from Customer management.
+Packages, portfolio entries, and promotions are stored in
+`may5.vendorContent`; active packages and portfolio photos appear on the public
+business profile, while active, in-date promotions are shown on business
+listings. Promotional messages are not sent by the application, and should
+only be sent to customers who have opted in. Business help submissions are
+stored as support reports.
 
 ## Customer profile and discovery
 

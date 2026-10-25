@@ -36,18 +36,45 @@ let vendorBranches
 let supportReports
 let pushSubscriptions
 let customerNotifications
+let vendorContent
 let pushConfiguration
+let databaseAvailable = false
 
 const emptyBusinessProfile = {
   businessName: '',
   businessType: '',
   description: '',
   address: '',
+  locality: '',
+  city: '',
+  state: '',
+  pincode: '',
   phone: '',
   email: '',
   website: '',
   openingHours: '',
   targetAudience: 'unisex',
+  openingTime: '',
+  closingTime: '',
+  shopPhoto: '',
+}
+
+const defaultVendorPreferences = {
+  booking: {
+    acceptInstantBooking: true,
+    requiresApproval: false,
+    advanceBookingRequired: false,
+    advancePaymentRequired: false,
+    numberOfSlots: 1,
+    cancellationPolicy: '',
+  },
+  customerManagement: {
+    enableCustomerHistory: true,
+    enableAppointmentReminders: true,
+    enablePromotionalMessages: false,
+    reminderIntervalHours: 2,
+    customReminderHours: 2,
+  },
 }
 
 function toBusinessProfile(user) {
@@ -58,6 +85,8 @@ function toBusinessProfile(user) {
         ...Object.keys(emptyBusinessProfile).map((key) => [key, user[key] ?? '']),
       ],
     ),
+    openingDays: Array.isArray(user.openingDays) ? user.openingDays : [1, 2, 3, 4, 5, 6],
+    amenities: Array.isArray(user.amenities) ? user.amenities : [],
     lat: Number.isFinite(user.lat) ? user.lat : null,
     lng: Number.isFinite(user.lng) ? user.lng : null,
   }
@@ -65,6 +94,16 @@ function toBusinessProfile(user) {
 
 app.use(cors({ origin: true }))
 app.use(express.json({ limit: '8mb' }))
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api/') && req.path !== '/api/health' && !databaseAvailable) {
+    res.status(503).json({
+      ok: false,
+      error: 'Database unavailable. The server is running without MongoDB connectivity.',
+    })
+    return
+  }
+  next()
+})
 
 function readSessionToken(req) {
   const cookie = req.headers.cookie
@@ -853,12 +892,22 @@ app.post('/api/bookings', async (req, res) => {
   }
 
   try {
+    const vendor = await users.findOne({ role: 'vendor', businessId: salonId })
+    const preferences = {
+      ...defaultVendorPreferences.booking,
+      ...(vendor?.vendorPreferences?.booking ?? {}),
+    }
+    if (!preferences.acceptInstantBooking || preferences.requiresApproval) {
+      booking.status = 'pending'
+    }
     const result = await bookings.insertOne(booking)
     await createCustomerNotification(
       user,
       'booking_confirmation',
-      'Booking confirmed',
-      `Your appointment is scheduled for ${new Date(booking.scheduledAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}.`,
+      booking.status === 'pending' ? 'Booking request sent' : 'Booking confirmed',
+      booking.status === 'pending'
+        ? `Your appointment request for ${new Date(booking.scheduledAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} is awaiting business approval.`
+        : `Your appointment is scheduled for ${new Date(booking.scheduledAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}.`,
       '/customer/bookings',
     )
     res.status(201).json({ ...booking, id: result.insertedId })
@@ -888,6 +937,15 @@ app.get('/api/catalog', async (_req, res) => {
         email: 1,
         website: 1,
         openingHours: 1,
+        locality: 1,
+        city: 1,
+        state: 1,
+        pincode: 1,
+        openingDays: 1,
+        openingTime: 1,
+        closingTime: 1,
+        amenities: 1,
+        shopPhoto: 1,
         targetAudience: 1,
         lat: 1,
         lng: 1,
@@ -900,7 +958,7 @@ app.get('/api/catalog', async (_req, res) => {
 
     const vendors = new Map(records.map((record) => [record.googleId, record]))
     const serviceRecords = await vendorServices
-      .find({ vendorId: { $in: [...vendors.keys()] } })
+      .find({ vendorId: { $in: [...vendors.keys()] }, active: { $ne: false } })
       .sort({ createdAt: -1 })
       .toArray()
     const services = serviceRecords.map(({ _id, vendorId, createdAt: _createdAt, ...service }) => ({
@@ -912,25 +970,66 @@ app.get('/api/catalog', async (_req, res) => {
     for (const service of services) {
       servicesByVendor.set(service.salonId, [...(servicesByVendor.get(service.salonId) ?? []), service])
     }
+    const contentRecords = await vendorContent
+      .find({
+        vendorId: { $in: [...vendors.keys()] },
+        active: true,
+        kind: { $in: ['package', 'portfolio', 'promotion'] },
+      })
+      .sort({ createdAt: -1 })
+      .limit(500)
+      .toArray()
+    const contentByVendor = new Map()
+    const today = new Date().toISOString().slice(0, 10)
+    for (const record of contentRecords) {
+      if (
+        record.kind === 'promotion' &&
+        ((record.startsAt && record.startsAt > today) || (record.endsAt && record.endsAt < today))
+      ) {
+        continue
+      }
+      const content = contentByVendor.get(record.vendorId) ?? { packages: [], portfolio: [], promotions: [] }
+      const publicRecord = {
+        id: record._id.toString(),
+        title: record.title,
+        description: record.description,
+        serviceIds: record.serviceIds ?? [],
+        price: record.price ?? null,
+        imageUrl: record.imageUrl ?? '',
+      }
+      if (record.kind === 'package') content.packages.push(publicRecord)
+      if (record.kind === 'portfolio' && publicRecord.imageUrl) content.portfolio.push(publicRecord)
+      if (record.kind === 'promotion') content.promotions.push(record)
+      contentByVendor.set(record.vendorId, content)
+    }
     const salons = records.map((record, index) => {
       const vendorServices = servicesByVendor.get(record.businessId) ?? []
+      const vendorContent = contentByVendor.get(record.googleId) ?? { packages: [], portfolio: [], promotions: [] }
+      const promotion = vendorContent.promotions[0]
       const categoryImage = record.businessType === 'Spa & wellness'
         ? 'https://images.unsplash.com/photo-1540555700478-4be289fbecef?w=800&q=80'
         : 'https://images.unsplash.com/photo-1560066984-138dadb4c035?w=800&q=80'
       return {
         id: record.businessId,
         name: record.businessName,
-        address: record.address,
+        address: [record.address, record.locality, record.city, record.state, record.pincode].filter(Boolean).join(', '),
         rating: 0,
-        coverImage: categoryImage,
+        coverImage: record.shopPhoto || categoryImage,
         homeService: vendorServices.some((service) => service.homeService),
         onlineServices: vendorServices.length > 0,
+        promo: promotion ? `${promotion.discountPercent}% off · ${promotion.title}` : undefined,
         businessType: record.businessType,
         description: record.description,
         phone: record.phone,
         email: record.email,
         website: record.website,
         openingHours: record.openingHours,
+        amenities: record.amenities ?? [],
+        packages: vendorContent.packages,
+        portfolio: vendorContent.portfolio,
+        openingDays: record.openingDays ?? [],
+        openingTime: record.openingTime ?? '',
+        closingTime: record.closingTime ?? '',
         targetAudience: record.targetAudience ?? 'unisex',
         lat: Number.isFinite(record.lat) ? record.lat : 0,
         lng: Number.isFinite(record.lng) ? record.lng : 0,
@@ -980,7 +1079,8 @@ app.patch('/api/vendor/profile', async (req, res) => {
     for (const key of Object.keys(emptyBusinessProfile)) {
       const value = profile[key]
       if (value === undefined) continue
-      if (typeof value !== 'string' || value.trim().length > (key === 'description' ? 800 : 240)) {
+      const maxLength = key === 'shopPhoto' ? 7_000_000 : key === 'description' ? 800 : 240
+      if (typeof value !== 'string' || value.trim().length > maxLength) {
         res.status(400).json({ error: `Enter valid ${key.replace(/[A-Z]/g, (letter) => ` ${letter.toLowerCase()}`)}` })
         return
       }
@@ -990,6 +1090,41 @@ app.patch('/api/vendor/profile', async (req, res) => {
         return
       }
       fields[key] = normalized
+    }
+    if (profile.openingDays !== undefined) {
+      if (
+        !Array.isArray(profile.openingDays) ||
+        profile.openingDays.length > 7 ||
+        profile.openingDays.some((day) => !Number.isInteger(day) || day < 0 || day > 6) ||
+        new Set(profile.openingDays).size !== profile.openingDays.length
+      ) {
+        res.status(400).json({ error: 'Choose valid opening days' })
+        return
+      }
+      fields.openingDays = profile.openingDays
+    }
+    if (profile.amenities !== undefined) {
+      if (
+        !Array.isArray(profile.amenities) ||
+        profile.amenities.length > 30 ||
+        profile.amenities.some((amenity) => typeof amenity !== 'string' || !amenity.trim() || amenity.trim().length > 60)
+      ) {
+        res.status(400).json({ error: 'Choose valid store amenities' })
+        return
+      }
+      fields.amenities = [...new Set(profile.amenities.map((amenity) => amenity.trim()))]
+    }
+    if (fields.pincode && !/^\d{6}$/.test(fields.pincode)) {
+      res.status(400).json({ error: 'PIN code must be six digits' })
+      return
+    }
+    if (fields.shopPhoto && !/^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(fields.shopPhoto)) {
+      res.status(400).json({ error: 'Upload a JPEG, PNG, or WebP store photo' })
+      return
+    }
+    if (fields.shopPhoto && Buffer.from(fields.shopPhoto.split(',')[1], 'base64').length > 5 * 1024 * 1024) {
+      res.status(400).json({ error: 'Store photo must be 5 MB or smaller' })
+      return
     }
     if (fields.targetAudience !== undefined && !['women', 'men', 'unisex'].includes(fields.targetAudience)) {
       res.status(400).json({ error: 'Choose a valid customer audience' })
@@ -1046,6 +1181,386 @@ app.patch('/api/vendor/profile', async (req, res) => {
   }
 })
 
+app.get('/api/vendor/preferences', async (req, res) => {
+  try {
+    const user = await authenticatedUser(req)
+    if (!user) {
+      res.status(401).json({ error: 'Authentication required' })
+      return
+    }
+    if (user.role !== 'vendor') {
+      res.status(403).json({ error: 'Business account required' })
+      return
+    }
+    res.json({
+      booking: { ...defaultVendorPreferences.booking, ...(user.vendorPreferences?.booking ?? {}) },
+      customerManagement: {
+        ...defaultVendorPreferences.customerManagement,
+        ...(user.vendorPreferences?.customerManagement ?? {}),
+      },
+    })
+  } catch (err) {
+    console.error('Could not load vendor preferences:', err)
+    res.status(500).json({ error: 'Could not load business preferences' })
+  }
+})
+
+app.patch('/api/vendor/preferences', async (req, res) => {
+  try {
+    const user = await authenticatedUser(req)
+    if (!user) {
+      res.status(401).json({ error: 'Authentication required' })
+      return
+    }
+    if (user.role !== 'vendor') {
+      res.status(403).json({ error: 'Business account required' })
+      return
+    }
+    const { booking, customerManagement } = req.body ?? {}
+    const booleanFields = [
+      'acceptInstantBooking',
+      'requiresApproval',
+      'advanceBookingRequired',
+      'advancePaymentRequired',
+    ]
+    const customerBooleanFields = [
+      'enableCustomerHistory',
+      'enableAppointmentReminders',
+      'enablePromotionalMessages',
+    ]
+    if (
+      !booking ||
+      booleanFields.some((key) => typeof booking[key] !== 'boolean') ||
+      !Number.isInteger(booking.numberOfSlots) ||
+      booking.numberOfSlots < 1 ||
+      booking.numberOfSlots > 500 ||
+      typeof booking.cancellationPolicy !== 'string' ||
+      booking.cancellationPolicy.length > 1000 ||
+      !customerManagement ||
+      customerBooleanFields.some((key) => typeof customerManagement[key] !== 'boolean') ||
+      ![2, 24, 48, 'custom'].includes(customerManagement.reminderIntervalHours) ||
+      !Number.isInteger(customerManagement.customReminderHours) ||
+      customerManagement.customReminderHours < 1 ||
+      customerManagement.customReminderHours > 720
+    ) {
+      res.status(400).json({ error: 'Check booking and customer management settings' })
+      return
+    }
+    const preferences = {
+      booking: { ...booking, cancellationPolicy: booking.cancellationPolicy.trim() },
+      customerManagement: { ...customerManagement },
+    }
+    await users.updateOne(
+      { googleId: user.googleId },
+      { $set: { vendorPreferences: preferences, updatedAt: new Date() } },
+    )
+    res.json(preferences)
+  } catch (err) {
+    console.error('Could not save vendor preferences:', err)
+    res.status(500).json({ error: 'Could not save business preferences' })
+  }
+})
+
+app.get('/api/vendor/content', async (req, res) => {
+  try {
+    const user = await authenticatedUser(req)
+    if (!user) {
+      res.status(401).json({ error: 'Authentication required' })
+      return
+    }
+    if (user.role !== 'vendor') {
+      res.status(403).json({ error: 'Business account required' })
+      return
+    }
+    const { kind } = req.query
+    if (!['package', 'portfolio', 'promotion'].includes(kind)) {
+      res.status(400).json({ error: 'Choose a valid business content type' })
+      return
+    }
+    const items = await vendorContent.find({ vendorId: user.googleId, kind }).sort({ createdAt: -1 }).limit(200).toArray()
+    res.json(items.map(({ _id, vendorId: _vendorId, ...item }) => ({ ...item, id: _id.toString() })))
+  } catch (err) {
+    console.error('Could not load vendor content:', err)
+    res.status(500).json({ error: 'Could not load business content' })
+  }
+})
+
+app.post('/api/vendor/content', async (req, res) => {
+  try {
+    const user = await authenticatedUser(req)
+    if (!user) {
+      res.status(401).json({ error: 'Authentication required' })
+      return
+    }
+    if (user.role !== 'vendor') {
+      res.status(403).json({ error: 'Business account required' })
+      return
+    }
+    const { kind, title, description, imageUrl, serviceIds, price, discountPercent, startsAt, endsAt, active } = req.body ?? {}
+    if (
+      !['package', 'portfolio', 'promotion'].includes(kind) ||
+      typeof title !== 'string' || !title.trim() || title.trim().length > 120 ||
+      typeof description !== 'string' || description.length > 1000 ||
+      typeof imageUrl !== 'string' || imageUrl.length > 7_000_000 ||
+      !Array.isArray(serviceIds) || serviceIds.length > 30 ||
+      serviceIds.some((id) => typeof id !== 'string' || id.length > 120) ||
+      (price !== null && (!Number.isFinite(price) || price < 0 || price > 1_000_000)) ||
+      (discountPercent !== null && (!Number.isInteger(discountPercent) || discountPercent < 1 || discountPercent > 100)) ||
+      typeof startsAt !== 'string' || startsAt.length > 40 ||
+      typeof endsAt !== 'string' || endsAt.length > 40 ||
+      typeof active !== 'boolean'
+    ) {
+      res.status(400).json({ error: 'Enter valid business content details' })
+      return
+    }
+    if (imageUrl && !/^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(imageUrl)) {
+      res.status(400).json({ error: 'Upload a JPEG, PNG, or WebP image' })
+      return
+    }
+    if (imageUrl && Buffer.from(imageUrl.split(',')[1], 'base64').length > 5 * 1024 * 1024) {
+      res.status(400).json({ error: 'Business image must be 5 MB or smaller' })
+      return
+    }
+    if (
+      (kind === 'portfolio' && !imageUrl) ||
+      (kind === 'package' && (!serviceIds.length || !Number.isFinite(price) || price <= 0)) ||
+      (kind === 'promotion' && !Number.isInteger(discountPercent))
+    ) {
+      res.status(400).json({ error: 'Complete the required details for this content type' })
+      return
+    }
+    if (kind === 'package') {
+      if (serviceIds.some((id) => !ObjectId.isValid(id))) {
+        res.status(400).json({ error: 'Choose valid services for the package' })
+        return
+      }
+      const ownedServices = await vendorServices.countDocuments({
+        _id: { $in: serviceIds.map((id) => new ObjectId(id)) },
+        vendorId: user.googleId,
+      })
+      if (ownedServices !== new Set(serviceIds).size) {
+        res.status(400).json({ error: 'Packages can only include your own services' })
+        return
+      }
+    }
+    if (
+      (startsAt && !Number.isFinite(Date.parse(startsAt))) ||
+      (endsAt && !Number.isFinite(Date.parse(endsAt))) ||
+      (startsAt && endsAt && Date.parse(endsAt) < Date.parse(startsAt))
+    ) {
+      res.status(400).json({ error: 'Enter a valid promotion date range' })
+      return
+    }
+    const item = {
+      vendorId: user.googleId,
+      kind,
+      title: title.trim(),
+      description: description.trim(),
+      imageUrl,
+      serviceIds,
+      price,
+      discountPercent,
+      startsAt,
+      endsAt,
+      active,
+      createdAt: new Date().toISOString(),
+    }
+    const result = await vendorContent.insertOne(item)
+    res.status(201).json({ ...item, id: result.insertedId.toString() })
+  } catch (err) {
+    console.error('Could not save vendor content:', err)
+    res.status(500).json({ error: 'Could not save business content' })
+  }
+})
+
+app.patch('/api/vendor/content/:id', async (req, res) => {
+  try {
+    const user = await authenticatedUser(req)
+    if (!user) {
+      res.status(401).json({ error: 'Authentication required' })
+      return
+    }
+    if (user.role !== 'vendor') {
+      res.status(403).json({ error: 'Business account required' })
+      return
+    }
+    if (!ObjectId.isValid(req.params.id) || typeof req.body?.active !== 'boolean') {
+      res.status(400).json({ error: 'Invalid content update' })
+      return
+    }
+    const updated = await vendorContent.findOneAndUpdate(
+      { _id: new ObjectId(req.params.id), vendorId: user.googleId },
+      { $set: { active: req.body.active, updatedAt: new Date().toISOString() } },
+      { returnDocument: 'after' },
+    )
+    if (!updated) {
+      res.status(404).json({ error: 'Business content not found' })
+      return
+    }
+    const { _id, vendorId: _vendorId, ...item } = updated
+    res.json({ ...item, id: _id.toString() })
+  } catch (err) {
+    console.error('Could not update vendor content:', err)
+    res.status(500).json({ error: 'Could not update business content' })
+  }
+})
+
+app.delete('/api/vendor/content/:id', async (req, res) => {
+  try {
+    const user = await authenticatedUser(req)
+    if (!user) {
+      res.status(401).json({ error: 'Authentication required' })
+      return
+    }
+    if (user.role !== 'vendor') {
+      res.status(403).json({ error: 'Business account required' })
+      return
+    }
+    if (!ObjectId.isValid(req.params.id)) {
+      res.status(400).json({ error: 'Invalid business content' })
+      return
+    }
+    const result = await vendorContent.deleteOne({ _id: new ObjectId(req.params.id), vendorId: user.googleId })
+    if (!result.deletedCount) {
+      res.status(404).json({ error: 'Business content not found' })
+      return
+    }
+    res.status(204).end()
+  } catch (err) {
+    console.error('Could not delete vendor content:', err)
+    res.status(500).json({ error: 'Could not delete business content' })
+  }
+})
+
+app.get('/api/vendor/bookings', async (req, res) => {
+  try {
+    const user = await authenticatedUser(req)
+    if (!user) {
+      res.status(401).json({ error: 'Authentication required' })
+      return
+    }
+    if (user.role !== 'vendor' || !user.businessId) {
+      res.status(403).json({ error: 'Complete a business profile to manage appointments' })
+      return
+    }
+    const records = await bookings.find({ salonId: user.businessId }).sort({ scheduledAt: 1 }).limit(500).toArray()
+    const customerIds = [...new Set(records.map((booking) => booking.customerId))]
+    const customerRecords = await users.find({ googleId: { $in: customerIds } }).project({ googleId: 1, fullName: 1, phone: 1 }).toArray()
+    const customers = new Map(customerRecords.map((customer) => [customer.googleId, customer]))
+    const serviceIds = [...new Set(records.map((booking) => booking.serviceId).filter((id) => ObjectId.isValid(id)).map((id) => new ObjectId(id)))]
+    const serviceRecords = await vendorServices.find({ _id: { $in: serviceIds }, vendorId: user.googleId }).project({ name: 1, price: 1 }).toArray()
+    const services = new Map(serviceRecords.map((service) => [service._id.toString(), { name: service.name, price: service.price }]))
+    res.json(records.map(({ _id, ...booking }) => {
+      const customer = customers.get(booking.customerId)
+      const service = services.get(booking.serviceId)
+      return {
+        ...booking,
+        id: _id.toString(),
+        customerName: customer?.fullName ?? 'Customer',
+        customerPhone: customer?.phone ?? '',
+        serviceName: service?.name ?? 'Service',
+        servicePrice: service?.price ?? 0,
+      }
+    }))
+  } catch (err) {
+    console.error('Could not load vendor appointments:', err)
+    res.status(500).json({ error: 'Could not load appointments' })
+  }
+})
+
+app.patch('/api/vendor/bookings/:id', async (req, res) => {
+  try {
+    const user = await authenticatedUser(req)
+    if (!user) {
+      res.status(401).json({ error: 'Authentication required' })
+      return
+    }
+    if (user.role !== 'vendor' || !user.businessId) {
+      res.status(403).json({ error: 'Business account required' })
+      return
+    }
+    const { status } = req.body ?? {}
+    if (!ObjectId.isValid(req.params.id) || !['scheduled', 'completed', 'cancelled'].includes(status)) {
+      res.status(400).json({ error: 'Choose a valid appointment status' })
+      return
+    }
+    const updated = await bookings.findOneAndUpdate(
+      { _id: new ObjectId(req.params.id), salonId: user.businessId },
+      { $set: { status, updatedAt: new Date() } },
+      { returnDocument: 'after' },
+    )
+    if (!updated) {
+      res.status(404).json({ error: 'Appointment not found' })
+      return
+    }
+    const { _id, ...booking } = updated
+    const customer = await users.findOne(
+      { googleId: booking.customerId },
+      { projection: { fullName: 1, phone: 1 } },
+    )
+    const service = ObjectId.isValid(booking.serviceId)
+      ? await vendorServices.findOne(
+          { _id: new ObjectId(booking.serviceId), vendorId: user.googleId },
+          { projection: { name: 1, price: 1 } },
+        )
+      : null
+    res.json({
+      ...booking,
+      id: _id.toString(),
+      customerName: customer?.fullName ?? 'Customer',
+      customerPhone: customer?.phone ?? '',
+      serviceName: service?.name ?? 'Service',
+      servicePrice: service?.price ?? 0,
+    })
+  } catch (err) {
+    console.error('Could not update appointment:', err)
+    res.status(500).json({ error: 'Could not update appointment' })
+  }
+})
+
+app.get('/api/vendor/customers', async (req, res) => {
+  try {
+    const user = await authenticatedUser(req)
+    if (!user) {
+      res.status(401).json({ error: 'Authentication required' })
+      return
+    }
+    if (user.role !== 'vendor' || !user.businessId) {
+      res.status(403).json({ error: 'Complete a business profile to view customers' })
+      return
+    }
+    const preferences = {
+      ...defaultVendorPreferences.customerManagement,
+      ...(user.vendorPreferences?.customerManagement ?? {}),
+    }
+    if (!preferences.enableCustomerHistory) {
+      res.status(403).json({ error: 'Customer history is disabled in customer management settings' })
+      return
+    }
+    const records = await bookings.find({ salonId: user.businessId }).sort({ scheduledAt: -1 }).limit(5000).toArray()
+    const history = new Map()
+    for (const booking of records) {
+      const existing = history.get(booking.customerId)
+      if (existing) existing.bookingCount += 1
+      else history.set(booking.customerId, { bookingCount: 1, lastVisit: booking.scheduledAt })
+    }
+    const customerIds = [...history.keys()]
+    const customerRecords = await users.find({ googleId: { $in: customerIds } })
+      .project({ googleId: 1, fullName: 1, phone: 1, email: 1 })
+      .toArray()
+    res.json(customerRecords.map((customer) => ({
+      id: customer.googleId,
+      fullName: customer.fullName ?? 'Customer',
+      phone: customer.phone ?? '',
+      email: customer.email ?? '',
+      ...history.get(customer.googleId),
+    })))
+  } catch (err) {
+    console.error('Could not load vendor customers:', err)
+    res.status(500).json({ error: 'Could not load customers' })
+  }
+})
+
 app.get('/api/vendor/services', async (req, res) => {
   try {
     const user = await authenticatedUser(req)
@@ -1062,7 +1577,11 @@ app.get('/api/vendor/services', async (req, res) => {
       .find({ vendorId: user.googleId })
       .sort({ createdAt: -1 })
       .toArray()
-    res.json(records.map(({ _id, ...service }) => ({ ...service, id: _id.toString() })))
+    res.json(records.map(({ _id, ...service }) => ({
+      ...service,
+      active: service.active !== false,
+      id: _id.toString(),
+    })))
   } catch (err) {
     console.error('MongoDB vendor services lookup failed:', err)
     res.status(500).json({ error: 'Could not load services' })
@@ -1128,6 +1647,7 @@ app.post('/api/vendor/services', async (req, res) => {
     durationMin,
     category,
     homeService,
+    active: true,
     imageUrl: imageData,
     vendorId: user.googleId,
     createdAt: new Date(),
@@ -1138,6 +1658,79 @@ app.post('/api/vendor/services', async (req, res) => {
   } catch (err) {
     console.error('MongoDB vendor service save failed:', err)
     res.status(500).json({ error: 'Could not save service' })
+  }
+})
+
+app.patch('/api/vendor/services/:id', async (req, res) => {
+  try {
+    const user = await authenticatedUser(req)
+    if (!user) {
+      res.status(401).json({ error: 'Authentication required' })
+      return
+    }
+    if (user.role !== 'vendor') {
+      res.status(403).json({ error: 'Business account required' })
+      return
+    }
+    if (!ObjectId.isValid(req.params.id)) {
+      res.status(400).json({ error: 'Invalid service ID' })
+      return
+    }
+    const patch = req.body ?? {}
+    const fields = {}
+    if (patch.name !== undefined) {
+      if (typeof patch.name !== 'string' || !patch.name.trim() || patch.name.trim().length > 120) {
+        res.status(400).json({ error: 'Service name must be between 1 and 120 characters' })
+        return
+      }
+      fields.name = patch.name.trim()
+    }
+    if (patch.description !== undefined) {
+      if (typeof patch.description !== 'string' || patch.description.length > 500) {
+        res.status(400).json({ error: 'Service description must be 500 characters or fewer' })
+        return
+      }
+      fields.description = patch.description.trim()
+    }
+    if (patch.price !== undefined) {
+      if (!Number.isFinite(patch.price) || patch.price <= 0 || patch.price > 1_000_000) {
+        res.status(400).json({ error: 'Enter a valid service price' })
+        return
+      }
+      fields.price = patch.price
+    }
+    if (patch.durationMin !== undefined) {
+      if (!Number.isInteger(patch.durationMin) || patch.durationMin < 1 || patch.durationMin > 1440) {
+        res.status(400).json({ error: 'Service duration must be from 1 to 1440 minutes' })
+        return
+      }
+      fields.durationMin = patch.durationMin
+    }
+    if (patch.active !== undefined) {
+      if (typeof patch.active !== 'boolean') {
+        res.status(400).json({ error: 'Invalid service status' })
+        return
+      }
+      fields.active = patch.active
+    }
+    if (!Object.keys(fields).length) {
+      res.status(400).json({ error: 'No service changes provided' })
+      return
+    }
+    const updated = await vendorServices.findOneAndUpdate(
+      { _id: new ObjectId(req.params.id), vendorId: user.googleId },
+      { $set: { ...fields, updatedAt: new Date() } },
+      { returnDocument: 'after' },
+    )
+    if (!updated) {
+      res.status(404).json({ error: 'Service not found' })
+      return
+    }
+    const { _id, vendorId: _vendorId, createdAt: _createdAt, updatedAt: _updatedAt, ...service } = updated
+    res.json({ ...service, id: _id.toString() })
+  } catch (err) {
+    console.error('Could not update vendor service:', err)
+    res.status(500).json({ error: 'Could not update service' })
   }
 })
 
@@ -1528,6 +2121,7 @@ async function start() {
     supportReports = database.collection('supportReports')
     pushSubscriptions = database.collection('pushSubscriptions')
     customerNotifications = database.collection('customerNotifications')
+    vendorContent = database.collection('vendorContent')
     const pushKeyStore = database.collection('systemConfiguration')
     const generatedVapidKeys = webpush.generateVAPIDKeys()
     const vapidKeys = await pushKeyStore.findOneAndUpdate(
@@ -1563,19 +2157,38 @@ async function start() {
     await pushSubscriptions.createIndex({ endpoint: 1 }, { unique: true })
     await pushSubscriptions.createIndex({ userId: 1 })
     await customerNotifications.createIndex({ userId: 1, createdAt: -1 })
+    await vendorContent.createIndex({ vendorId: 1, kind: 1, createdAt: -1 })
+    databaseAvailable = true
 
     async function sendUpcomingAppointmentReminders() {
       const now = new Date()
-      const nextWindow = new Date(now.getTime() + 15 * 60 * 1000)
+      const nextWindow = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
       const upcoming = await bookings
         .find({
           status: 'scheduled',
           scheduledAt: { $gte: now.toISOString(), $lte: nextWindow.toISOString() },
           reminderSentAt: { $exists: false },
         })
-        .limit(100)
+        .sort({ scheduledAt: 1 })
+        .limit(2000)
         .toArray()
+      const vendorsByBusiness = new Map()
       for (const booking of upcoming) {
+        let vendor = vendorsByBusiness.get(booking.salonId)
+        if (vendor === undefined) {
+          vendor = await users.findOne({ businessId: booking.salonId, role: 'vendor' })
+          vendorsByBusiness.set(booking.salonId, vendor ?? null)
+        }
+        const vendorPreferences = {
+          ...defaultVendorPreferences.customerManagement,
+          ...(vendor?.vendorPreferences?.customerManagement ?? {}),
+        }
+        if (!vendorPreferences.enableAppointmentReminders) continue
+        const reminderHours = vendorPreferences.reminderIntervalHours === 'custom'
+          ? vendorPreferences.customReminderHours
+          : vendorPreferences.reminderIntervalHours
+        const scheduledAt = Date.parse(booking.scheduledAt)
+        if (now.getTime() < scheduledAt - reminderHours * 60 * 60 * 1000) continue
         const claimed = await bookings.updateOne(
           { _id: booking._id, reminderSentAt: { $exists: false } },
           { $set: { reminderSentAt: new Date() } },
@@ -1603,13 +2216,20 @@ async function start() {
       console.error('Could not send initial appointment reminders:', err)
     })
 
-    app.listen(port, '0.0.0.0', () => {
-      console.log(`MAY5 server with MongoDB listening on port ${port}`)
-    })
+    console.log('MAY5 connected to MongoDB')
   } catch (err) {
+    databaseAvailable = false
     console.error('Could not connect to MongoDB:', err)
-    process.exit(1)
+    console.warn('MAY5 will retry MongoDB connection in 30 seconds; database-backed API routes return 503 until it recovers.')
+    const retryTimer = setTimeout(() => {
+      void start()
+    }, 30_000)
+    retryTimer.unref()
   }
 }
 
-start()
+app.listen(port, '0.0.0.0', () => {
+  console.log(`MAY5 server listening on port ${port}`)
+})
+
+void start()

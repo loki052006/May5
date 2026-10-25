@@ -55,6 +55,7 @@ export function SalonDetailPage() {
       <div className="may5-page-pad">
         {favoriteError && <p role="alert" style={{ color: 'var(--may5-danger)' }}>{favoriteError}</p>}
         {catalogError && <p role="status" style={{ color: 'var(--may5-muted)' }}>{catalogError}</p>}
+        {salon.promo && <p className="may5-tag" style={{ display: 'inline-block' }}>{salon.promo}</p>}
         <section className="may5-card" style={{ padding: 14 }}>
           <p style={{ margin: 0, fontWeight: 600 }}>{salon.businessType ?? (salon.demoListing ? 'Sample beauty business' : 'MAY5 salon')}</p>
           <p style={{ color: 'var(--may5-muted)', margin: '6px 0' }}>{salon.address}</p>
@@ -63,8 +64,51 @@ export function SalonDetailPage() {
           {salon.phone && <p style={{ margin: '6px 0' }}>Phone: <a href={`tel:${salon.phone}`}>{salon.phone}</a></p>}
           {salon.email && <p style={{ margin: '6px 0' }}>Email: <a href={`mailto:${salon.email}`}>{salon.email}</a></p>}
           {salon.website && <p style={{ margin: '6px 0' }}>Website: <a href={salon.website} target="_blank" rel="noreferrer">{salon.website}</a></p>}
+          {salon.amenities && salon.amenities.length > 0 && (
+            <div style={{ marginTop: 10 }}>
+              <strong>Amenities</strong>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+                {salon.amenities.map((amenity) => <span key={amenity} className="may5-tag">{amenity}</span>)}
+              </div>
+            </div>
+          )}
           {salon.demoListing && <span className="may5-tag">Sample listing — details are illustrative</span>}
         </section>
+        {salon.packages && salon.packages.length > 0 && (
+          <section style={{ marginTop: 20 }}>
+            <h2 style={{ fontSize: '1rem' }}>Packages</h2>
+            <div style={{ display: 'grid', gap: 10 }}>
+              {salon.packages.map((item) => (
+                <article key={item.id} className="may5-card" style={{ padding: 14 }}>
+                  <strong>{item.title}</strong>
+                  {item.price !== null && <p style={{ margin: '6px 0' }}>{formatINR(item.price)}</p>}
+                  {item.description && <p style={{ margin: '6px 0' }}>{item.description}</p>}
+                  {item.serviceIds.length > 0 && (
+                    <p style={{ color: 'var(--may5-muted)', margin: '6px 0 0' }}>
+                      Includes: {item.serviceIds.map((serviceId) => services.find((service) => service.id === serviceId)?.name ?? 'Service').join(' · ')}
+                    </p>
+                  )}
+                </article>
+              ))}
+            </div>
+          </section>
+        )}
+        {salon.portfolio && salon.portfolio.length > 0 && (
+          <section style={{ marginTop: 20 }}>
+            <h2 style={{ fontSize: '1rem' }}>Portfolio</h2>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10 }}>
+              {salon.portfolio.map((item) => (
+                <article key={item.id} className="may5-card" style={{ overflow: 'hidden' }}>
+                  <img src={item.imageUrl} alt={item.title} loading="lazy" style={{ width: '100%', height: 150, objectFit: 'cover' }} />
+                  <div style={{ padding: 10 }}>
+                    <strong>{item.title}</strong>
+                    {item.description && <p style={{ margin: '6px 0 0', fontSize: '0.85rem' }}>{item.description}</p>}
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
+        )}
         <div className="may5-search" style={{ marginTop: 16 }}>
           <input
             aria-label="Search services"

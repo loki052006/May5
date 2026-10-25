@@ -90,6 +90,15 @@ const VendorSettingsPage = lazy(() =>
 const VendorBookingPrefsPage = lazy(() =>
   import('./pages/vendor/VendorBookingPrefsPage').then((module) => ({ default: module.VendorBookingPrefsPage })),
 )
+const VendorContentPage = lazy(() =>
+  import('./pages/vendor/VendorContentPage').then((module) => ({ default: module.VendorContentPage })),
+)
+const VendorCustomersPage = lazy(() =>
+  import('./pages/vendor/VendorCustomersPage').then((module) => ({ default: module.VendorCustomersPage })),
+)
+const VendorHelpPage = lazy(() =>
+  import('./pages/vendor/VendorHelpPage').then((module) => ({ default: module.VendorHelpPage })),
+)
 const AdminGatePage = lazy(() =>
   import('./pages/admin/AdminGatePage').then((module) => ({ default: module.AdminGatePage })),
 )
@@ -165,14 +174,17 @@ export function AppRoutes() {
         <Route path="calendar" element={<VendorCalendarPage />} />
         <Route path="services" element={<VendorServicesPage />} />
         <Route path="more" element={<VendorMorePage />} />
-        <Route path="customers" element={stub('Customers', '/(vendor)/customers', '/vendor/dashboard')} />
+        <Route path="customers" element={<VendorCustomersPage />} />
         <Route path="analytics" element={<VendorAnalyticsPage />} />
         <Route path="settings" element={<VendorSettingsPage />} />
-        <Route path="booking-prefs" element={<VendorBookingPrefsPage />} />
+        <Route path="booking-prefs" element={<VendorBookingPrefsPage section="booking" />} />
+        <Route path="customer-management" element={<VendorBookingPrefsPage section="customer" />} />
         <Route path="add-service" element={<AddServicePage />} />
         <Route path="billing" element={stub('Billing', '/(vendor)/billing', '/vendor/more')} />
-        <Route path="portfolio" element={stub('Portfolio', '/(vendor)/portfolio/index', '/vendor/more')} />
-        <Route path="promotions" element={stub('Promotions', '/(vendor)/promotions/index', '/vendor/more')} />
+        <Route path="portfolio" element={<VendorContentPage kind="portfolio" />} />
+        <Route path="packages" element={<VendorContentPage kind="packages" />} />
+        <Route path="promotions" element={<VendorContentPage kind="promotions" />} />
+        <Route path="help" element={<VendorHelpPage />} />
         <Route path="staff" element={<VendorStaffPage />} />
       </Route>
 

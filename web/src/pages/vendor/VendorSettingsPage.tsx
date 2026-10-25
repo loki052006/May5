@@ -16,14 +16,37 @@ const emptyProfile: VendorBusinessProfile = {
   businessType: '',
   description: '',
   address: '',
+  locality: '',
+  city: '',
+  state: '',
+  pincode: '',
   phone: '',
   email: '',
   website: '',
   openingHours: '',
+  openingDays: [1, 2, 3, 4, 5, 6],
+  openingTime: '09:00',
+  closingTime: '18:00',
+  amenities: [],
+  shopPhoto: '',
   targetAudience: 'unisex',
   lat: null,
   lng: null,
 }
+
+const weekdays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+const amenityOptions = [
+  'Free WiFi',
+  'Parking',
+  'Air conditioning',
+  'Wheelchair accessible',
+  'Card payment',
+  'Waiting area',
+  'Refreshments',
+  'Kids friendly',
+  'Music',
+  'Home service',
+]
 
 export function VendorSettingsPage() {
   const { user } = useAuth()
@@ -173,15 +196,43 @@ export function VendorSettingsPage() {
     setProfileSaved(false)
     setProfileSaving(true)
     try {
+      const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+      const nextProfile = {
+        ...profile,
+        openingHours: profile.openingDays.length && profile.openingTime && profile.closingTime
+          ? `${profile.openingDays.map((day) => dayNames[day]).join(' ')}, ${profile.openingTime}–${profile.closingTime}`
+          : profile.openingHours,
+      }
       const saved = remote
-        ? await saveVendorBusinessProfile(profile)
-        : profile
+        ? await saveVendorBusinessProfile(nextProfile)
+        : nextProfile
       setProfile(saved)
       setProfileSaved(true)
     } catch (err) {
       setProfileError(err instanceof Error ? err.message : 'Could not save business details.')
     } finally {
       setProfileSaving(false)
+    }
+  }
+
+  async function changeShopPhoto(file?: File) {
+    if (!file) return
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024) {
+      setProfileError('Choose a JPEG, PNG, or WebP image up to 5 MB.')
+      return
+    }
+    try {
+      const photo = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => typeof reader.result === 'string' ? resolve(reader.result) : reject(new Error('Could not read image'))
+        reader.onerror = () => reject(reader.error ?? new Error('Could not read image'))
+        reader.readAsDataURL(file)
+      })
+      setProfile({ ...profile, shopPhoto: photo })
+      setProfileError('')
+    } catch (err) {
+      console.error('Could not load shop photo:', err)
+      setProfileError(err instanceof Error ? err.message : 'Could not load shop photo.')
     }
   }
 
@@ -215,6 +266,12 @@ export function VendorSettingsPage() {
         </p>
         {profileLoading ? <p role="status">Loading business details…</p> : (
           <form onSubmit={saveProfile} style={{ display: 'grid', gap: 10 }}>
+            <label htmlFor="shop-photo">Shop photo</label>
+            {profile.shopPhoto && (
+              <img src={profile.shopPhoto} alt="Business storefront preview" style={{ width: '100%', maxHeight: 240, objectFit: 'cover', borderRadius: 12 }} />
+            )}
+            <input id="shop-photo" className="may5-input" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => void changeShopPhoto(event.target.files?.[0])} />
+            <small style={{ color: 'var(--may5-muted)' }}>Displayed on your customer listing. JPEG, PNG, or WebP up to 5 MB.</small>
             <label htmlFor="business-name">Business / store name</label>
             <input id="business-name" className="may5-input" value={profile.businessName} onChange={(event) => setProfile({ ...profile, businessName: event.target.value })} maxLength={100} required />
             <label htmlFor="business-type">Business type</label>
@@ -229,6 +286,14 @@ export function VendorSettingsPage() {
             </select>
             <label htmlFor="business-address">Store location / full address</label>
             <input id="business-address" className="may5-input" value={profile.address} onChange={(event) => setProfile({ ...profile, address: event.target.value })} maxLength={240} required />
+            <label htmlFor="business-locality">Area / locality</label>
+            <input id="business-locality" className="may5-input" value={profile.locality} onChange={(event) => setProfile({ ...profile, locality: event.target.value })} maxLength={120} />
+            <div className="business-coordinate-row">
+              <label>City<input className="may5-input" value={profile.city} onChange={(event) => setProfile({ ...profile, city: event.target.value })} maxLength={100} /></label>
+              <label>State<input className="may5-input" value={profile.state} onChange={(event) => setProfile({ ...profile, state: event.target.value })} maxLength={100} /></label>
+            </div>
+            <label htmlFor="business-pincode">PIN code</label>
+            <input id="business-pincode" className="may5-input" inputMode="numeric" pattern="[0-9]{6}" value={profile.pincode} onChange={(event) => setProfile({ ...profile, pincode: event.target.value })} maxLength={6} />
             <label htmlFor="business-description">About your store and services</label>
             <textarea id="business-description" className="may5-input" value={profile.description} onChange={(event) => setProfile({ ...profile, description: event.target.value })} maxLength={800} rows={4} />
             <label htmlFor="business-phone">Business phone</label>
@@ -239,12 +304,55 @@ export function VendorSettingsPage() {
             <input id="business-website" className="may5-input" type="url" value={profile.website} onChange={(event) => setProfile({ ...profile, website: event.target.value })} placeholder="https://example.com" maxLength={240} />
             <label htmlFor="business-hours">Opening hours</label>
             <input id="business-hours" className="may5-input" value={profile.openingHours} onChange={(event) => setProfile({ ...profile, openingHours: event.target.value })} placeholder="Mon–Sat, 10:00 AM–8:00 PM" maxLength={240} />
+            <fieldset style={{ border: 0, padding: 0, display: 'grid', gap: 8 }}>
+              <legend>Opening days</legend>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {weekdays.map((day, index) => (
+                  <label key={day} className="may5-tag" style={{ cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={profile.openingDays.includes(index)}
+                      onChange={(event) => setProfile({
+                        ...profile,
+                        openingDays: event.target.checked
+                          ? [...profile.openingDays, index].sort()
+                          : profile.openingDays.filter((openDay) => openDay !== index),
+                      })}
+                    /> {day.slice(0, 3)}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+            <div className="business-coordinate-row">
+              <label htmlFor="business-opening-time">Opening time<input id="business-opening-time" className="may5-input" type="time" value={profile.openingTime} onChange={(event) => setProfile({ ...profile, openingTime: event.target.value })} /></label>
+              <label htmlFor="business-closing-time">Closing time<input id="business-closing-time" className="may5-input" type="time" value={profile.closingTime} onChange={(event) => setProfile({ ...profile, closingTime: event.target.value })} /></label>
+            </div>
             <label htmlFor="business-audience">Who can book services?</label>
             <select id="business-audience" className="may5-input" value={profile.targetAudience} onChange={(event) => setProfile({ ...profile, targetAudience: event.target.value as VendorBusinessProfile['targetAudience'] })}>
               <option value="unisex">Everyone</option>
               <option value="women">Women only</option>
               <option value="men">Men only</option>
             </select>
+            <fieldset style={{ border: 0, padding: 0, display: 'grid', gap: 8 }}>
+              <legend>Amenities</legend>
+              <small style={{ color: 'var(--may5-muted)' }}>Select the amenities customers can expect at your store.</small>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {amenityOptions.map((amenity) => (
+                  <label key={amenity} className="may5-tag" style={{ cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={profile.amenities.includes(amenity)}
+                      onChange={(event) => setProfile({
+                        ...profile,
+                        amenities: event.target.checked
+                          ? [...profile.amenities, amenity]
+                          : profile.amenities.filter((item) => item !== amenity),
+                      })}
+                    /> {amenity}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
             <label>Store map location (latitude / longitude)</label>
             <p style={{ color: 'var(--may5-muted)', margin: 0, fontSize: '0.85rem' }}>A map pin helps customers find your store. Coordinates can be obtained from your device location or entered manually.</p>
             <div className="business-coordinate-row">
@@ -260,7 +368,7 @@ export function VendorSettingsPage() {
           </form>
         )}
       </section>
-      <section className="may5-card" style={{ padding: 16, marginTop: 16 }}>
+      <section id="vendor-stores" className="may5-card" style={{ padding: 16, marginTop: 16 }}>
         <h2>Multi-store management</h2>
         {branches.length > 0 && (
           <>

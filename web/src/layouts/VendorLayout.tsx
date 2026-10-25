@@ -1,6 +1,7 @@
 import { NavLink, Outlet } from 'react-router-dom'
 import {
   Calendar,
+  Ellipsis,
   LayoutDashboard,
   LogOut,
   Scissors,
@@ -16,6 +17,7 @@ const links = [
   { to: '/vendor/customers', label: 'Customers', icon: Users },
   { to: '/vendor/services', label: 'Services', icon: Scissors },
   { to: '/vendor/settings', label: 'Settings', icon: Settings },
+  { to: '/vendor/more', label: 'More', icon: Ellipsis },
 ]
 
 export function VendorLayout() {
