@@ -78,10 +78,6 @@ export function NewBookingPage() {
       return
     }
     setError('')
-    if (remote && salonRef.demoListing) {
-      setError('This sample listing is for display only. Choose a live business to make a booking.')
-      return
-    }
     const scheduledAt = new Date(when)
     if (!when || !Number.isFinite(scheduledAt.getTime()) || scheduledAt.getTime() <= Date.now()) {
       setError('Choose a future appointment date and time.')
@@ -150,7 +146,9 @@ export function NewBookingPage() {
         {service.name} at {salonRef.name}
       </p>
       {salonRef.demoListing && remote && (
-        <p className="may5-tag" role="status">Sample listing — live bookings are not available.</p>
+        <p className="may5-tag" role="status">
+          Demo listing — checkout uses Razorpay test mode and cannot charge real money.
+        </p>
       )}
       {pref === 'home' && service.homeService && (
         <p className="may5-tag">At-home service selected</p>
@@ -185,9 +183,9 @@ export function NewBookingPage() {
             className={`may5-chip ${paymentMode === 'online' ? 'active' : ''}`}
             onClick={() => setPaymentMode('online')}
           >
-            Pay online
+            {salonRef.demoListing ? 'Pay with test gateway' : 'Pay online'}
           </button>
-          {!salonRef.advancePaymentRequired && (
+          {!salonRef.advancePaymentRequired && !salonRef.demoListing && (
             <button
               type="button"
               className={`may5-chip ${paymentMode === 'offline' ? 'active' : ''}`}
@@ -198,8 +196,8 @@ export function NewBookingPage() {
           )}
         </div>
 
-        <button type="submit" className="may5-btn may5-btn-primary" style={{ width: '100%' }} disabled={saving || (remote && Boolean(salonRef.demoListing))}>
-          {saving ? (paymentMode === 'online' ? 'Opening secure checkout…' : 'Saving booking…') : paymentMode === 'online' ? 'Continue to payment' : 'Confirm booking'}
+        <button type="submit" className="may5-btn may5-btn-primary" style={{ width: '100%' }} disabled={saving}>
+          {saving ? (paymentMode === 'online' ? 'Opening secure checkout…' : 'Saving booking…') : paymentMode === 'online' ? salonRef.demoListing ? 'Continue to test checkout' : 'Continue to payment' : 'Confirm booking'}
         </button>
         {error && <p role="alert" style={{ color: 'var(--may5-danger)' }}>{error}</p>}
       </form>

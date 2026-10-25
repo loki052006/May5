@@ -125,3 +125,11 @@ confirms capture, and creates a booking only after payment. The signed webhook
 also handles cases where the customer closes Checkout before returning to MAY5.
 Online payments are stored in `may5.paymentOrders`, with payment and booking
 references recorded for reconciliation.
+
+Sample salon and service listings are clearly marked as demos. Demo checkout is
+restricted to `RAZORPAY_TEST_KEY_ID` and `RAZORPAY_TEST_KEY_SECRET`; it never
+falls back to the live credentials. Add Razorpay test-mode credentials in the
+hosting environment to try demo payments. For test payment webhooks, also set
+`RAZORPAY_TEST_WEBHOOK_SECRET` and configure the test webhook to send
+`payment.captured` events to `/api/payments/razorpay/webhook`. Demo appointments
+are marked as such and do not represent a real booking with a business.

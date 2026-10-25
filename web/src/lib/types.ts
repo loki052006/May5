@@ -203,6 +203,7 @@ export interface Booking {
   paymentMode: PaymentMode
   mediaAuthorized: boolean
   mediaUrls?: string[]
+  demoListing?: boolean
 }
 
 export interface Branch {

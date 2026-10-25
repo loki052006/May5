@@ -125,16 +125,27 @@ function hashToken(token) {
 }
 
 async function razorpayRequest(path, options = {}) {
-  const keyId = process.env.RAZORPAY_KEY_ID
-  const keySecret = process.env.RAZORPAY_KEY_SECRET
+  const testMode = options.testMode === true
+  const { testMode: _testMode, ...requestOptions } = options
+  const keyId = process.env[testMode ? 'RAZORPAY_TEST_KEY_ID' : 'RAZORPAY_KEY_ID']
+  const keySecret = process.env[testMode ? 'RAZORPAY_TEST_KEY_SECRET' : 'RAZORPAY_KEY_SECRET']
+  if (keyId && (testMode ? !keyId.startsWith('rzp_test_') : keyId.startsWith('rzp_test_'))) {
+    const err = new Error(testMode
+      ? 'Demo checkout requires a Razorpay test key ID beginning with rzp_test_.'
+      : 'Live checkout is configured with a test key ID; use the matching live key ID and secret.')
+    err.status = 503
+    throw err
+  }
   if (!keyId || !keySecret) {
-    const err = new Error('Online payments are not configured')
+    const err = new Error(testMode
+      ? 'Demo checkout requires Razorpay test keys. Add RAZORPAY_TEST_KEY_ID and RAZORPAY_TEST_KEY_SECRET in Render.'
+      : 'Online payments are not configured')
     err.status = 503
     throw err
   }
 
   const response = await fetch(`https://api.razorpay.com/v1${path}`, {
-    ...options,
+    ...requestOptions,
     headers: {
       Authorization: `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString('base64')}`,
       ...(options.body ? { 'Content-Type': 'application/json' } : {}),
@@ -150,6 +161,36 @@ async function razorpayRequest(path, options = {}) {
   }
   return result
 }
+
+const demoSalonNames = new Map([
+  ['salon-1', 'Glamour Wave Salon'],
+  ['salon-2', 'Elegance Salon'],
+  ['salon-3', 'Urban Glow Studio'],
+  ['salon-4', 'Blush & Bloom Beauty Parlour'],
+  ['salon-5', 'Crown & Comb Hair Studio'],
+  ['salon-6', 'Petal Spa & Wellness'],
+  ['salon-7', 'NailNest Studio'],
+  ['salon-8', 'Mirror & Muse Beauty Lounge'],
+])
+
+const demoServices = new Map([
+  ['svc-1', { salonId: 'salon-2', name: "Women's Haircut", price: 650 }],
+  ['svc-2', { salonId: 'salon-2', name: 'Balayage Color', price: 1800 }],
+  ['svc-3', { salonId: 'salon-2', name: 'At-home Blowout', price: 850 }],
+  ['svc-4', { salonId: 'salon-1', name: 'Blowout', price: 790 }],
+  ['svc-5', { salonId: 'salon-3', name: 'Signature facial', price: 1200 }],
+  ['svc-6', { salonId: 'salon-3', name: 'Bridal makeup', price: 6500 }],
+  ['svc-7', { salonId: 'salon-4', name: 'Everyday makeup', price: 1800 }],
+  ['svc-8', { salonId: 'salon-4', name: 'Threading and brow shaping', price: 350 }],
+  ['svc-9', { salonId: 'salon-5', name: 'Men’s haircut and styling', price: 700 }],
+  ['svc-10', { salonId: 'salon-5', name: 'Hair spa and conditioning', price: 1400 }],
+  ['svc-11', { salonId: 'salon-6', name: 'Relaxing full-body massage', price: 2200 }],
+  ['svc-12', { salonId: 'salon-6', name: 'Aromatherapy treatment', price: 2800 }],
+  ['svc-13', { salonId: 'salon-7', name: 'Gel manicure', price: 950 }],
+  ['svc-14', { salonId: 'salon-7', name: 'Classic pedicure', price: 1100 }],
+  ['svc-15', { salonId: 'salon-8', name: 'Saree draping and party makeup', price: 3200 }],
+  ['svc-16', { salonId: 'salon-8', name: 'Hair styling', price: 900 }],
+])
 
 async function recordCapturedPayment(order, payment) {
   const existingBooking = await bookings.findOne({
@@ -176,6 +217,7 @@ async function recordCapturedPayment(order, payment) {
     paymentId: payment.id,
     paymentOrderId: order.razorpayOrderId,
     amountPaid: order.amount,
+    ...(order.isDemo ? { demoListing: true } : {}),
     mediaAuthorized: false,
     mediaUrls: [],
     createdAt: new Date(),
@@ -974,11 +1016,16 @@ app.post('/api/payments/razorpay/order', async (req, res) => {
       return
     }
     const { salonId, serviceId, staffId, scheduledAt } = req.body ?? {}
+    const demoService = demoServices.get(serviceId)
+    const isDemoListing = Boolean(demoService)
     if (typeof salonId !== 'string' || !salonId.trim()) {
       res.status(400).json({ error: 'Choose a valid business' })
       return
     }
-    if (typeof serviceId !== 'string' || !ObjectId.isValid(serviceId)) {
+    if (
+      (isDemoListing && (demoService.salonId !== salonId || !demoSalonNames.has(salonId))) ||
+      (!isDemoListing && (typeof serviceId !== 'string' || !ObjectId.isValid(serviceId)))
+    ) {
       res.status(400).json({ error: 'Choose a service from a live business listing' })
       return
     }
@@ -990,14 +1037,19 @@ app.post('/api/payments/razorpay/order', async (req, res) => {
       res.status(400).json({ error: 'Choose a future appointment date and time' })
       return
     }
-    const [vendor, service] = await Promise.all([
-      users.findOne({ role: 'vendor', businessId: salonId }),
-      vendorServices.findOne({
-        _id: new ObjectId(serviceId),
-        salonId,
-        active: { $ne: false },
-      }),
-    ])
+    const [vendor, service] = isDemoListing
+      ? [
+          { businessName: demoSalonNames.get(salonId) },
+          demoService,
+        ]
+      : await Promise.all([
+          users.findOne({ role: 'vendor', businessId: salonId }),
+          vendorServices.findOne({
+            _id: new ObjectId(serviceId),
+            salonId,
+            active: { $ne: false },
+          }),
+        ])
     if (!vendor || !service) {
       res.status(404).json({ error: 'The selected business or service is unavailable' })
       return
@@ -1018,6 +1070,7 @@ app.post('/api/payments/razorpay/order', async (req, res) => {
 
     const receipt = `m5${randomBytes(18).toString('hex')}`
     const order = await razorpayRequest('/orders', {
+      testMode: isDemoListing,
       method: 'POST',
       body: JSON.stringify({
         amount,
@@ -1037,6 +1090,7 @@ app.post('/api/payments/razorpay/order', async (req, res) => {
       amount,
       currency: 'INR',
       requiresApproval: !preferences.acceptInstantBooking || preferences.requiresApproval,
+      ...(isDemoListing ? { isDemo: true, paymentEnvironment: 'test' } : { paymentEnvironment: 'live' }),
       status: 'created',
       createdAt: new Date(),
     })
@@ -1044,7 +1098,7 @@ app.post('/api/payments/razorpay/order', async (req, res) => {
       orderId: order.id,
       amount: order.amount,
       currency: order.currency,
-      keyId: process.env.RAZORPAY_KEY_ID,
+      keyId: process.env[isDemoListing ? 'RAZORPAY_TEST_KEY_ID' : 'RAZORPAY_KEY_ID'],
       businessName: vendor.businessName,
       serviceName: service.name,
       customerName: user.fullName ?? '',
@@ -1058,7 +1112,20 @@ app.post('/api/payments/razorpay/order', async (req, res) => {
 })
 
 app.post('/api/payments/razorpay/webhook', async (req, res) => {
-  const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET
+  const payment = req.body?.payload?.payment?.entity
+  let order
+  if (typeof payment?.order_id === 'string') {
+    try {
+      order = await paymentOrders.findOne({ razorpayOrderId: payment.order_id })
+    } catch (err) {
+      console.error('Could not look up Razorpay webhook order:', err)
+      res.status(500).json({ error: 'Could not verify payment webhook' })
+      return
+    }
+  }
+  const webhookSecret = process.env[
+    order?.paymentEnvironment === 'test' ? 'RAZORPAY_TEST_WEBHOOK_SECRET' : 'RAZORPAY_WEBHOOK_SECRET'
+  ]
   const signature = req.headers['x-razorpay-signature']
   if (!webhookSecret || typeof signature !== 'string' || !Buffer.isBuffer(req.rawBody)) {
     res.status(503).json({ error: 'Payment webhook verification is not configured' })
@@ -1075,7 +1142,6 @@ app.post('/api/payments/razorpay/webhook', async (req, res) => {
     return
   }
   try {
-    const payment = req.body?.payload?.payment?.entity
     if (
       !payment ||
       typeof payment.order_id !== 'string' ||
@@ -1086,7 +1152,6 @@ app.post('/api/payments/razorpay/webhook', async (req, res) => {
       res.status(400).json({ error: 'Invalid captured-payment event' })
       return
     }
-    const order = await paymentOrders.findOne({ razorpayOrderId: payment.order_id })
     if (!order) {
       console.warn('Received a captured payment for an unknown Razorpay order.')
       res.status(200).json({ received: true })
@@ -1135,9 +1200,14 @@ app.post('/api/payments/razorpay/verify', async (req, res) => {
       res.json({ ...existingBooking, id: existingBooking._id.toString() })
       return
     }
-    const keySecret = process.env.RAZORPAY_KEY_SECRET
+    const testMode = order.paymentEnvironment === 'test'
+    const keySecret = process.env[testMode ? 'RAZORPAY_TEST_KEY_SECRET' : 'RAZORPAY_KEY_SECRET']
     if (!keySecret) {
-      res.status(503).json({ error: 'Online payments are not configured' })
+      res.status(503).json({
+        error: testMode
+          ? 'Demo checkout requires Razorpay test keys. Add RAZORPAY_TEST_KEY_ID and RAZORPAY_TEST_KEY_SECRET in Render.'
+          : 'Online payments are not configured',
+      })
       return
     }
     const expected = createHmac('sha256', keySecret)
@@ -1149,7 +1219,7 @@ app.post('/api/payments/razorpay/verify', async (req, res) => {
       return
     }
 
-    const payment = await razorpayRequest(`/payments/${encodeURIComponent(paymentId)}`)
+    const payment = await razorpayRequest(`/payments/${encodeURIComponent(paymentId)}`, { testMode })
     if (
       payment.order_id !== orderId ||
       payment.status !== 'captured' ||

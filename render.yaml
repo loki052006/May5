@@ -26,3 +26,9 @@ services:
         sync: false
       - key: RAZORPAY_WEBHOOK_SECRET
         sync: false
+      - key: RAZORPAY_TEST_KEY_ID
+        sync: false
+      - key: RAZORPAY_TEST_KEY_SECRET
+        sync: false
+      - key: RAZORPAY_TEST_WEBHOOK_SECRET
+        sync: false

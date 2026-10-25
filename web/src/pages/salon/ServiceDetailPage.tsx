@@ -26,6 +26,7 @@ export function ServiceDetailPage() {
       </header>
       <div className="may5-page-pad">
         <p style={{ color: 'var(--may5-muted)' }}>{salon.name}</p>
+        {salon.demoListing && <p className="may5-tag" role="status">Demo service — checkout uses test mode only.</p>}
         <p>
           {formatINR(svc.price)} · {svc.durationMin} min
         </p>

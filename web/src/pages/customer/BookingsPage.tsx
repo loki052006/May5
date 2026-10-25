@@ -31,6 +31,7 @@ export function CustomerBookingsPage() {
                 <p style={{ margin: 0, fontSize: '0.85rem' }}>
                   Status: {b.status} · Payment: {b.paymentMode}
                 </p>
+                {b.demoListing && <span className="may5-tag">Demo booking · test payment only</span>}
                 {b.mediaAuthorized && b.mediaUrls?.length ? (
                   <Link to="/customer/profile/history" style={{ color: 'var(--may5-terracotta)', fontSize: '0.85rem' }}>
                     View authorized photos
