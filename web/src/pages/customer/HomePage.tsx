@@ -1,8 +1,7 @@
 import { Link } from 'react-router-dom'
 import { Bell, Flower2, Grid2X2, Hand, Heart, MapPin, Scissors, Search, Sparkles, UserRound } from 'lucide-react'
 import { useAuth } from '../../lib/auth'
-import { specialOffers, staff } from '../../lib/mockData'
-import { getState, store, subscribe } from '../../lib/store'
+import { getState, subscribe } from '../../lib/store'
 import { useEffect, useState } from 'react'
 import { usePublicCatalog } from '../../lib/usePublicCatalog'
 import { isSalonOpenNow } from '../../lib/format'
@@ -11,9 +10,8 @@ export function CustomerHomePage() {
   const { user, toggleFavorite } = useAuth()
   const [, tick] = useState(0)
   const [favoriteError, setFavoriteError] = useState('')
-  const { salons, services } = usePublicCatalog()
+  const { salons, services, loading, error: catalogError } = usePublicCatalog()
   useEffect(() => subscribe(() => tick((n) => n + 1)), [])
-  const followed = getState().followedVideos
   const favorites = getState().favorites
   const categories = [
     { label: 'Hair', icon: Scissors },
@@ -70,25 +68,6 @@ export function CustomerHomePage() {
         </section>
 
         <section style={{ marginTop: 24 }}>
-          <h2 style={{ fontSize: '1.1rem', marginBottom: 8 }}>My Master</h2>
-          <p style={{ color: 'var(--may5-muted)', fontSize: '0.82rem', margin: '0 0 12px' }}>
-            Follow stylists to keep up with their latest videos.
-          </p>
-          <div style={{ display: 'flex', gap: 16, overflowX: 'auto', paddingBottom: 8 }}>
-            {staff.map((s) => (
-              <div key={s.id} style={{ minWidth: 120, textAlign: 'center' }}>
-                <img src={s.avatarUrl} alt="" style={{ width: 72, height: 72, borderRadius: '50%', objectFit: 'cover' }} />
-                <p style={{ margin: '8px 0 4px', fontWeight: 600, fontSize: '0.85rem' }}>{s.fullName}</p>
-                <Link to={`/salon/${s.salonId}`} className="may5-btn may5-btn-secondary" style={{ minHeight: 32, padding: '0 12px', fontSize: '0.7rem' }}>BOOK NOW</Link>
-                <button type="button" className="may5-btn may5-btn-ghost" style={{ display: 'flex', minHeight: 32, margin: '4px auto 0', padding: '0 12px', fontSize: '0.75rem' }} aria-pressed={followed.includes(s.id)} onClick={() => store.toggleVideoFollow(s.id)}>
-                  {followed.includes(s.id) ? 'Following' : 'Follow'}
-                </button>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section style={{ marginTop: 24 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
             <h2 style={{ fontSize: '1.1rem', margin: 0 }}>Special Offers</h2>
             <Link to="/customer/explore" style={{ color: 'var(--may5-terracotta)', fontWeight: 600 }}>
@@ -96,18 +75,23 @@ export function CustomerHomePage() {
             </Link>
           </div>
           <div style={{ display: 'flex', gap: 12, overflowX: 'auto', marginTop: 12 }}>
-            {specialOffers.map((o) => (
-              <div key={o.id} className="may5-card" style={{ minWidth: 200, overflow: 'hidden' }}>
-                <img src={o.image} alt="" loading="lazy" decoding="async" style={{ width: '100%', height: 120, objectFit: 'cover' }} />
-                <p style={{ padding: '8px 12px', margin: 0, fontWeight: 600 }}>{o.title}</p>
-              </div>
+            {salons.filter((salon) => salon.promo).map((salon) => (
+              <Link key={salon.id} to={`/salon/${salon.id}`} className="may5-card" style={{ minWidth: 200, overflow: 'hidden' }}>
+                <img src={salon.coverImage} alt="" loading="lazy" decoding="async" style={{ width: '100%', height: 120, objectFit: 'cover' }} />
+                <p style={{ padding: '8px 12px', margin: 0, fontWeight: 600 }}>{salon.promo}</p>
+                <p style={{ padding: '0 12px 8px', margin: 0, color: 'var(--may5-muted)' }}>{salon.name}</p>
+              </Link>
             ))}
+            {salons.every((salon) => !salon.promo) && !loading && (
+              <p style={{ color: 'var(--may5-muted)' }}>No live offers right now.</p>
+            )}
           </div>
         </section>
 
         <section style={{ marginTop: 24 }}>
           <div className="home-section-heading"><h2>Nearby for you</h2><Link to="/customer/explore">See all</Link></div>
           {favoriteError && <p role="alert" style={{ color: 'var(--may5-danger)' }}>{favoriteError}</p>}
+          {catalogError && <p role="alert" style={{ color: 'var(--may5-danger)' }}>{catalogError}</p>}
           <div className="home-salon-list">
             {salons.slice(0, 5).map((salon) => (
               <article key={salon.id} className="may5-card home-salon-card">
@@ -127,6 +111,13 @@ export function CustomerHomePage() {
               </article>
             ))}
           </div>
+          {salons.length === 0 && (
+            <p role="status" style={{ color: 'var(--may5-muted)' }}>
+              {loading
+                ? 'Loading bookable businesses…'
+                : catalogError || 'No bookable businesses yet. Check back after a business publishes its services.'}
+            </p>
+          )}
         </section>
 
         <section style={{ marginTop: 24 }}>
@@ -139,6 +130,9 @@ export function CustomerHomePage() {
               </Link>
             ))}
           </div>
+          {!loading && salons.length > 0 && salons.every((salon) => !isSalonOpenNow(salon.openingHours)) && (
+            <p style={{ color: 'var(--may5-muted)' }}>No bookable businesses are open right now.</p>
+          )}
         </section>
       </div>
     </>

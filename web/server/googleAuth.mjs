@@ -1302,6 +1302,7 @@ app.get('/api/catalog', async (_req, res) => {
     for (const service of services) {
       servicesByVendor.set(service.salonId, [...(servicesByVendor.get(service.salonId) ?? []), service])
     }
+    const bookableRecords = records.filter((record) => servicesByVendor.has(record.businessId))
     const contentRecords = await vendorContent
       .find({
         vendorId: { $in: [...vendors.keys()] },
@@ -1334,7 +1335,7 @@ app.get('/api/catalog', async (_req, res) => {
       if (record.kind === 'promotion') content.promotions.push(record)
       contentByVendor.set(record.vendorId, content)
     }
-    const salons = records.map((record, index) => {
+    const salons = bookableRecords.map((record, index) => {
       const vendorServices = servicesByVendor.get(record.businessId) ?? []
       const vendorContent = contentByVendor.get(record.googleId) ?? { packages: [], portfolio: [], promotions: [] }
       const promotion = vendorContent.promotions[0]

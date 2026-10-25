@@ -17,7 +17,7 @@ export function CustomerExplorePage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [favoriteError, setFavoriteError] = useState('')
   const { toggleFavorite } = useAuth()
-  const { salons, services, error: catalogError } = usePublicCatalog()
+  const { salons, services, loading, error: catalogError } = usePublicCatalog()
 
   useEffect(() => subscribe(() => tick((n) => n + 1)), [])
 
@@ -147,7 +147,17 @@ export function CustomerExplorePage() {
             </Link>
           </article>
         ))}
-        {list.length === 0 && <p className="explore-empty">No salons match these filters. Try clearing a filter or choosing another category.</p>}
+        {list.length === 0 && (
+          <p className="explore-empty" role="status">
+            {loading
+              ? 'Loading bookable businesses…'
+              : catalogError
+                ? catalogError
+                : salons.length === 0
+                  ? 'No bookable businesses yet. Check back after a business publishes its services.'
+                  : 'No salons match these filters. Try clearing a filter or choosing another category.'}
+          </p>
+        )}
         {favoriteError && <p role="alert" style={{ color: 'var(--may5-danger)' }}>{favoriteError}</p>}
 
         <button type="button" className="explore-filter-button may5-btn may5-btn-primary" onClick={() => setFilterOpen(true)}>More filters</button>

@@ -13,10 +13,16 @@ export function SalonDetailPage() {
   const [serviceQuery, setServiceQuery] = useState('')
   const [favoriteError, setFavoriteError] = useState('')
   const { toggleFavorite } = useAuth()
-  const { salons, services, error: catalogError } = usePublicCatalog()
+  const { salons, services, loading, error: catalogError } = usePublicCatalog()
   useEffect(() => subscribe(() => tick((n) => n + 1)), [])
   const salon = salons.find((s) => s.id === id)
-  if (!salon) return <p className="may5-page-pad">Salon not found</p>
+  if (!salon) {
+    return (
+      <p className="may5-page-pad" role="status">
+        {loading ? 'Loading business…' : catalogError || 'This business has no active bookable services.'}
+      </p>
+    )
+  }
 
   const salonId = salon.id
   const list = services

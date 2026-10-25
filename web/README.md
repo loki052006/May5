@@ -76,7 +76,9 @@ customer audience settings. Booking and customer-management preferences are
 saved with the vendor profile. When booking approval is required, new
 appointments are created as pending and can be approved or declined from the
 vendor Calendar. Service owners can pause or edit their listings; paused
-services are omitted from the public catalog.
+services are omitted from the public catalog. Customer discovery shows only
+businesses with at least one active service, and every listed service uses the
+vendor's saved price for checkout.
 
 Appointments and their customer/service details power the business dashboard
 and analytics. Customer history can be disabled from Customer management.
