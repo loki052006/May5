@@ -31,7 +31,13 @@ export function CustomerBookingsPage() {
                 <p style={{ margin: 0, fontSize: '0.85rem' }}>
                   Status: {b.status} · Payment: {b.paymentMode}
                 </p>
-                {b.demoListing && <span className="may5-tag">Demo booking · payment is real; service is illustrative and not redeemable</span>}
+                {b.demoListing && (
+                  <span className="may5-tag">
+                    {b.paymentMode === 'offline'
+                      ? 'Demo booking · no real store or service; no cash is due'
+                      : 'Demo booking · payment is real; service is illustrative and not redeemable'}
+                  </span>
+                )}
                 {b.mediaAuthorized && b.mediaUrls?.length ? (
                   <Link to="/customer/profile/history" style={{ color: 'var(--may5-terracotta)', fontSize: '0.85rem' }}>
                     View authorized photos

@@ -136,5 +136,8 @@ booking with a business. Every sample salon displays the complete 36-service
 sample menu, with server-side fixed prices for every salon/service combination.
 The demo catalog also includes a dedicated barber and grooming listing, with
 additional barbers, spa therapists, and beauty practitioners.
+Real business listings can accept cash at the store unless the business
+requires advance online payment. Sample demo listings offer an offline demo
+booking only; no real store, service, or cash payment is involved.
 Test-mode environment variables remain only to process any test orders created
 before this change.

@@ -1282,13 +1282,22 @@ app.post('/api/bookings', async (req, res) => {
       res.status(403).json({ error: 'Customer account required' })
       return
     }
-    const { salonId, serviceId, staffId, scheduledAt, paymentMode } = req.body ?? {}
+    const { salonId, serviceId, staffId, scheduledAt, paymentMode, acknowledgeDemoOffline } = req.body ?? {}
+    const demoService = demoServices.get(serviceId)
+    const isDemoListing = Boolean(demoService)
     if (typeof salonId !== 'string' || !salonId.trim()) {
       res.status(400).json({ error: 'Choose a valid business' })
       return
     }
-    if (typeof serviceId !== 'string' || !ObjectId.isValid(serviceId)) {
+    if (
+      (isDemoListing && (demoService.salonId !== salonId || !demoSalonNames.has(salonId))) ||
+      (!isDemoListing && (typeof serviceId !== 'string' || !ObjectId.isValid(serviceId)))
+    ) {
       res.status(400).json({ error: 'Choose a service from a live business listing' })
+      return
+    }
+    if (isDemoListing && acknowledgeDemoOffline !== true) {
+      res.status(400).json({ error: 'Confirm that this demo listing is not a real store before booking' })
       return
     }
     if (staffId !== undefined && typeof staffId !== 'string') {
@@ -1301,6 +1310,25 @@ app.post('/api/bookings', async (req, res) => {
     }
     if (paymentMode !== 'offline') {
       res.status(400).json({ error: 'Online bookings must be paid through checkout' })
+      return
+    }
+    if (isDemoListing) {
+      const booking = {
+        salonId,
+        serviceId,
+        ...(staffId ? { staffId } : {}),
+        customerId: user.googleId,
+        status: 'scheduled',
+        scheduledAt: new Date(scheduledAt).toISOString(),
+        paymentMode,
+        paymentStatus: 'not_applicable',
+        demoListing: true,
+        mediaAuthorized: false,
+        mediaUrls: [],
+        createdAt: new Date(),
+      }
+      const result = await bookings.insertOne(booking)
+      res.status(201).json({ ...booking, id: result.insertedId.toString() })
       return
     }
     const [vendor, service] = await Promise.all([

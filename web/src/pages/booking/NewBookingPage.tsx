@@ -85,7 +85,9 @@ export function NewBookingPage() {
       return
     }
     if (salonRef.demoListing && !acknowledgeDemoPayment) {
-      setError('Confirm that you understand this demo service is illustrative and not redeemable.')
+      setError(paymentMode === 'online'
+        ? 'Confirm that you understand this demo service is illustrative and not redeemable.'
+        : 'Confirm that you understand this demo listing is not a real store.')
       return
     }
     setSaving(true)
@@ -127,13 +129,17 @@ export function NewBookingPage() {
         })
         booking = await verifyRazorpayPayment(payment)
       } else if (remote) {
-        booking = await createGoogleBooking(bookingDetails)
+        booking = await createGoogleBooking({
+          ...bookingDetails,
+          ...(salonRef.demoListing ? { acknowledgeDemoOffline: true } : {}),
+        })
       } else {
         booking = {
           id: `bk-${Date.now()}`,
           customerId: user.id,
           ...bookingDetails,
           status: 'scheduled' as const,
+          ...(salonRef.demoListing ? { demoListing: true } : {}),
           mediaAuthorized: false,
           mediaUrls: [],
         }
@@ -155,7 +161,9 @@ export function NewBookingPage() {
       </p>
       {salonRef.demoListing && remote && (
         <p className="may5-tag" role="status">
-          Demo listing — this is not a real business or redeemable appointment. Continuing to Razorpay will charge real money.
+          {paymentMode === 'online'
+            ? 'Demo listing — this is not a real business or redeemable appointment. Continuing to Razorpay will charge real money.'
+            : 'Demo listing — this is not a real store or redeemable appointment. No cash is due; this is only a sample booking.'}
         </p>
       )}
       {pref === 'home' && service.homeService && (
@@ -193,9 +201,9 @@ export function NewBookingPage() {
               required
               style={{ marginTop: 4 }}
             />
-            <span>
-              I understand this is an illustrative demo listing, the service is not redeemable, and I will be charged ₹{service.price.toLocaleString('en-IN')} if I complete payment.
-            </span>
+            <span>{paymentMode === 'online'
+              ? `I understand this is an illustrative demo listing, the service is not redeemable, and I will be charged ₹${service.price.toLocaleString('en-IN')} if I complete payment.`
+              : 'I understand this is an illustrative demo listing, not a real store, and this sample booking does not reserve a real service or require cash payment.'}</span>
           </label>
         )}
 
@@ -204,17 +212,23 @@ export function NewBookingPage() {
           <button
             type="button"
             className={`may5-chip ${paymentMode === 'online' ? 'active' : ''}`}
-            onClick={() => setPaymentMode('online')}
+            onClick={() => {
+              setPaymentMode('online')
+              setAcknowledgeDemoPayment(false)
+            }}
           >
             {salonRef.demoListing ? 'Pay with live gateway' : 'Pay online'}
           </button>
-          {!salonRef.advancePaymentRequired && !salonRef.demoListing && (
+          {!salonRef.advancePaymentRequired && (
             <button
               type="button"
               className={`may5-chip ${paymentMode === 'offline' ? 'active' : ''}`}
-              onClick={() => setPaymentMode('offline')}
+              onClick={() => {
+                setPaymentMode('offline')
+                setAcknowledgeDemoPayment(false)
+              }}
             >
-              Pay at salon
+              {salonRef.demoListing ? 'Pay at store (demo only)' : 'Pay at store'}
             </button>
           )}
         </div>

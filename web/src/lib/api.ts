@@ -134,7 +134,9 @@ export function setGoogleFavorite(salonId: string, favorite: boolean): Promise<v
 }
 
 export function createGoogleBooking(
-  booking: Pick<Booking, 'salonId' | 'serviceId' | 'staffId' | 'scheduledAt' | 'paymentMode'>,
+  booking: Pick<Booking, 'salonId' | 'serviceId' | 'staffId' | 'scheduledAt' | 'paymentMode'> & {
+    acknowledgeDemoOffline?: boolean
+  },
 ): Promise<Booking> {
   return request<Booking>('/api/bookings', {
     method: 'POST',
