@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { staff } from '../../lib/mockData'
-import { store, getState } from '../../lib/store'
+import { store } from '../../lib/store'
 import { useAuth } from '../../lib/auth'
 import { createGoogleBooking, createRazorpayOrder, verifyRazorpayPayment } from '../../lib/api'
 import type { PaymentMode } from '../../lib/types'
@@ -64,7 +64,6 @@ export function NewBookingPage() {
   const [acknowledgeDemoPayment, setAcknowledgeDemoPayment] = useState(false)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
-  const pref = getState().bookingLocationPref
 
   if (!svc || !salon) return <p className="may5-page-pad" role="status">{loading ? 'Loading service…' : 'Service not found'}</p>
 
@@ -166,10 +165,6 @@ export function NewBookingPage() {
             : 'Demo listing — this is not a real store or redeemable appointment. No cash is due; this is only a sample booking.'}
         </p>
       )}
-      {pref === 'home' && service.homeService && (
-        <p className="may5-tag">At-home service selected</p>
-      )}
-
       <form onSubmit={onSubmit} style={{ marginTop: 16 }}>
         <label>Choose staff</label>
         <select className="may5-input" value={staffId} onChange={(e) => setStaffId(e.target.value)} style={{ marginBottom: 12 }}>

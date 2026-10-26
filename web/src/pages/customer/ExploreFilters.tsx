@@ -54,7 +54,6 @@ export function ExploreFilters({
           {(
             [
               ['specialOffers', 'Special Offers'],
-              ['homeService', 'Home Service'],
               ['onlineServices', 'Online Services'],
               ['openNow', 'Open now'],
               ['rating45', 'Rating 4.5+'],

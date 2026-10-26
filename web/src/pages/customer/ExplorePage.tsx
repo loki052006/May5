@@ -50,7 +50,6 @@ export function CustomerExplorePage() {
       )
     }
     if (filters.specialOffers) items = items.filter((s) => !!s.promo)
-    if (filters.homeService) items = items.filter((s) => s.homeService)
     if (filters.onlineServices) items = items.filter((s) => s.onlineServices)
     if (filters.openNow) items = items.filter((s) => isSalonOpenNow(s.openingHours))
     if (filters.rating45) items = items.filter((s) => s.rating >= 4.5)

@@ -112,6 +112,12 @@ is optional and should be set to a monitored contact email for production.
 Customers can send a test notification from the same settings page to verify
 browser permission and delivery.
 
+The web customer experience lists in-person appointments only and does not
+display booking videos or at-home service options. The customer area includes
+an informational promotion for the MAY5 mobile application; add the app store
+URL to make that promotion a downloadable link. The shared API retains its
+mobile-app fields for compatibility.
+
 ### Online payments
 
 Online service bookings use Razorpay Checkout. Set `RAZORPAY_KEY_ID` and

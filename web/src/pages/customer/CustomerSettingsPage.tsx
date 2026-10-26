@@ -53,8 +53,10 @@ export function CustomerSettingsPage() {
     let active = true
     void loadCustomerSettings().then((saved) => {
       if (active) {
-        setSettings(saved)
-        store.setBookingLocationPref(saved.bookingPreferences.serviceLocation)
+        setSettings({
+          ...saved,
+          bookingPreferences: { ...saved.bookingPreferences, serviceLocation: 'salon' },
+        })
       }
     }).catch((err: unknown) => {
       console.error('Could not load customer settings:', err)
@@ -92,9 +94,14 @@ export function CustomerSettingsPage() {
     setSuccess('')
     setSaving(true)
     try {
-      const saved = await saveCustomerSettings(next)
-      setSettings(saved)
-      store.setBookingLocationPref(saved.bookingPreferences.serviceLocation)
+      const saved = await saveCustomerSettings({
+        ...next,
+        bookingPreferences: { ...next.bookingPreferences, serviceLocation: 'salon' },
+      })
+      setSettings({
+        ...saved,
+        bookingPreferences: { ...saved.bookingPreferences, serviceLocation: 'salon' },
+      })
       setSuccess('Your changes have been saved.')
     } catch (err) {
       console.error('Could not save customer settings:', err)
@@ -188,7 +195,7 @@ export function CustomerSettingsPage() {
         {loading && <p role="status">Loading your settings…</p>}
         {!loading && section === 'addresses' && (
           <>
-            <p className="settings-muted">Save addresses for at-home services and faster bookings.</p>
+            <p className="settings-muted">Save addresses for faster bookings.</p>
             {settings.addresses.map((item) => (
               <div className="may5-card settings-row" key={item.id}>
                 <div><strong>{item.label}</strong><p>{item.address}, {item.city} {item.pincode}</p></div>
@@ -243,11 +250,7 @@ export function CustomerSettingsPage() {
         {!loading && section === 'preferences' && (
           <section className="may5-card settings-form">
             <h2>Booking preferences</h2>
-            <label>Preferred service location
-              <select className="may5-input" value={settings.bookingPreferences.serviceLocation} onChange={(e) => updateSettings({ bookingPreferences: { ...settings.bookingPreferences, serviceLocation: e.target.value as 'salon' | 'home' } })}>
-                <option value="salon">Visit a salon</option><option value="home">At-home service</option>
-              </select>
-            </label>
+            <p className="settings-muted">Appointments are booked at the service provider’s location.</p>
             <label>Preferred appointment time
               <select className="may5-input" value={settings.bookingPreferences.preferredTime} onChange={(e) => updateSettings({ bookingPreferences: { ...settings.bookingPreferences, preferredTime: e.target.value } })}>
                 <option value="">No preference</option><option>Morning</option><option>Afternoon</option><option>Evening</option>
@@ -277,7 +280,6 @@ export function CustomerSettingsPage() {
             <p className="settings-muted">Answers to common questions about using MAY5.</p>
             <Faq question="How do I book an appointment?" answer="Explore salons or services, choose an option, then select a date and time on the booking page." />
             <Faq question="Can I cancel a booking?" answer="Open My bookings and contact the salon directly for changes or cancellation. Cancellation options depend on the salon’s policy." />
-            <Faq question="How do I book an at-home service?" answer="Choose At-home service in Booking preferences, then select a provider offering home service." />
             <Faq question="How do I contact support?" answer="Use Report a problem in your profile and include the booking or issue details. The MAY5 team will receive your report." />
             <Link className="may5-btn may5-btn-secondary settings-help-link" to="/customer/profile/report">Report a problem</Link>
           </section>

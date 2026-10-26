@@ -219,7 +219,6 @@ export interface SalonFilters {
   sort: 'distance' | 'top_reviewed' | 'most_popular'
   maxDistanceKm: number
   specialOffers: boolean
-  homeService: boolean
   onlineServices: boolean
   openNow: boolean
   rating45: boolean

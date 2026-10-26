@@ -11,6 +11,21 @@ export function CustomerLayout() {
       <Link to="/customer/home" aria-label="MAY5 home" className="may5-mobile-brand">
         <img src="/may5-brand.png" alt="MAY5 — Sign your style" className="may5-logo" />
       </Link>
+      <aside
+        aria-label="MAY5 mobile application"
+        style={{
+          margin: '0 16px 12px',
+          padding: '12px 16px',
+          borderRadius: 12,
+          background: 'var(--may5-cream)',
+          color: 'var(--may5-ink)',
+        }}
+      >
+        <strong>Want more features?</strong>
+        <p style={{ margin: '4px 0 0', fontSize: '0.9rem' }}>
+          Download the MAY5 mobile application.
+        </p>
+      </aside>
       <Outlet context={{ user }} />
       <nav className="may5-bottom-nav" aria-label="Customer">
         <NavLink to="/customer/home" className={({ isActive }) => (isActive ? 'active' : '')}>

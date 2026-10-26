@@ -151,7 +151,6 @@ function Section({ title, items }: { title: string; items: ServiceItem[] }) {
               {formatINR(svc.price)} · {Math.floor(svc.durationMin / 60)}h {svc.durationMin % 60}m
             </p>
             {svc.description && <p style={{ margin: '6px 0 0', fontSize: '0.85rem' }}>{svc.description}</p>}
-            {svc.homeService && <span className="may5-tag" style={{ marginTop: 6, display: 'inline-block' }}>At-home available</span>}
           </div>
           <Link to={`/booking/new/${svc.id}`} className="may5-btn may5-btn-primary" style={{ minHeight: 36, padding: '0 16px' }}>
             BOOK

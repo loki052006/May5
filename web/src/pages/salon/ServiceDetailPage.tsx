@@ -35,9 +35,7 @@ export function ServiceDetailPage() {
         {svc.imageUrl && (
           <img src={svc.imageUrl} alt={svc.name} style={{ width: '100%', maxHeight: 320, objectFit: 'cover', borderRadius: 12 }} />
         )}
-        {svc.homeService && <span className="may5-tag">Mobile / at-home available</span>}
         {salon.description && <p style={{ marginTop: 16 }}>{salon.description}</p>}
-        {svc.homeService && <p className="may5-tag">At-home service available</p>}
         <Link
           to={`/booking/new/${svc.id}`}
           className="may5-btn may5-btn-primary"

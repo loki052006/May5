@@ -32,7 +32,6 @@ export function AddServicePage() {
   const [price, setPrice] = useState('')
   const [durationMin, setDurationMin] = useState('')
   const [category, setCategory] = useState<'popular' | 'other'>('popular')
-  const [homeService, setHomeService] = useState(false)
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState('')
   const [error, setError] = useState('')
@@ -104,7 +103,7 @@ export function AddServicePage() {
         price: Number(price),
         durationMin: Number(durationMin),
         category,
-        homeService,
+        homeService: false,
         imageUrl,
       })
       navigate('/vendor/services')
@@ -189,15 +188,6 @@ export function AddServicePage() {
           <option value="popular">Popular</option>
           <option value="other">Other</option>
         </select>
-
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-          <input
-            type="checkbox"
-            checked={homeService}
-            onChange={(event) => setHomeService(event.target.checked)}
-          />
-          Available at home
-        </label>
 
         <label htmlFor="service-image">Service image (required, up to 5 MB)</label>
         <input

@@ -45,7 +45,6 @@ const amenityOptions = [
   'Refreshments',
   'Kids friendly',
   'Music',
-  'Home service',
 ]
 
 export function VendorSettingsPage() {
@@ -419,10 +418,6 @@ export function VendorSettingsPage() {
           </button>
         </form>
         {error && <p role="alert" style={{ color: 'var(--may5-danger)' }}>{error}</p>}
-      </section>
-      <section className="may5-card" style={{ padding: 16, marginTop: 16 }}>
-        <h2>Video following</h2>
-        <p style={{ color: 'var(--may5-muted)' }}>Customers can follow a stylist from their booking videos in booking history.</p>
       </section>
     </>
   )

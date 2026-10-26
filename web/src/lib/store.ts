@@ -11,8 +11,6 @@ export interface AppState {
   bookings: Booking[]
   filters: SalonFilters
   adminGatePassed: boolean
-  followedVideos: string[]
-  bookingLocationPref: 'salon' | 'home'
   vendorBranches: Branch[]
 }
 
@@ -20,7 +18,6 @@ const defaultFilters: SalonFilters = {
   sort: 'distance',
   maxDistanceKm: 10,
   specialOffers: false,
-  homeService: false,
   onlineServices: false,
   openNow: false,
   rating45: false,
@@ -36,8 +33,6 @@ const defaultState: AppState = {
   bookings: initialBookings,
   filters: defaultFilters,
   adminGatePassed: false,
-  followedVideos: [],
-  bookingLocationPref: 'salon',
   vendorBranches: branches,
 }
 
@@ -107,12 +102,6 @@ export const store = {
   setAdminGatePassed(value: boolean) {
     setState({ adminGatePassed: value })
   },
-  toggleVideoFollow(id: string) {
-    const set = new Set(state.followedVideos)
-    if (set.has(id)) set.delete(id)
-    else set.add(id)
-    setState({ followedVideos: [...set] })
-  },
   addVendorBranch(branch: Omit<Branch, 'id' | 'vendorId'>) {
     const created: Branch = {
       ...branch,
@@ -127,9 +116,6 @@ export const store = {
         branch.id === id ? { ...branch, ...patch } : branch,
       ),
     })
-  },
-  setBookingLocationPref(pref: 'salon' | 'home') {
-    setState({ bookingLocationPref: pref })
   },
   updateProfile(patch: Partial<UserProfile>) {
     if (!state.user) return

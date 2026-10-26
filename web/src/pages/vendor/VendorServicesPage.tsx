@@ -117,7 +117,7 @@ export function VendorServicesPage() {
                 <div>
                   <strong>{service.name}</strong>
                   <p style={{ margin: '4px 0 0', color: 'var(--may5-muted)' }}>
-                    {formatINR(service.price)} · {service.durationMin} min {service.homeService ? '· At-home' : ''}
+                    {formatINR(service.price)} · {service.durationMin} min
                   </p>
                 </div>
                 <span className="may5-tag">{service.active ? 'Active' : 'Paused'}</span>
@@ -135,7 +135,7 @@ export function VendorServicesPage() {
         <div key={service.id} className="may5-card" style={{ padding: 12, marginBottom: 8 }}>
           <strong>{service.name}</strong>
           <p style={{ margin: '4px 0 0', color: 'var(--may5-muted)' }}>
-            {formatINR(service.price)} · {service.durationMin} min {service.homeService ? '· At-home' : ''}
+            {formatINR(service.price)} · {service.durationMin} min
           </p>
           <small>Demo listing — add a photo when creating a business service.</small>
         </div>

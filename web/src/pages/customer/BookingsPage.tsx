@@ -1,4 +1,3 @@
-import { Link } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { getState, subscribe } from '../../lib/store'
 import { formatIndianDate } from '../../lib/format'
@@ -38,11 +37,6 @@ export function CustomerBookingsPage() {
                       : 'Demo booking · payment is real; service is illustrative and not redeemable'}
                   </span>
                 )}
-                {b.mediaAuthorized && b.mediaUrls?.length ? (
-                  <Link to="/customer/profile/history" style={{ color: 'var(--may5-terracotta)', fontSize: '0.85rem' }}>
-                    View authorized photos
-                  </Link>
-                ) : null}
               </div>
             )
           })

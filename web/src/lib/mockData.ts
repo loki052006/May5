@@ -165,11 +165,11 @@ const demoServiceTemplates: ServiceItem[] = [
   {
     id: 'svc-3',
     salonId: 'salon-2',
-    name: 'At-home Blowout',
+    name: 'Blowout and Styling',
     price: 850,
     durationMin: 60,
     category: 'other',
-    homeService: true,
+    homeService: false,
   },
   {
     id: 'svc-4',
@@ -675,10 +675,7 @@ export const initialBookings: Booking[] = [
     status: 'scheduled',
     scheduledAt: new Date(Date.now() + 86400000).toISOString(),
     paymentMode: 'online',
-    mediaAuthorized: true,
-    mediaUrls: [
-      'https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=600&q=80',
-    ],
+    mediaAuthorized: false,
   },
 ]
 

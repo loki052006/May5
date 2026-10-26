@@ -5,9 +5,11 @@ import type { Salon, ServiceItem } from './types'
 
 export function usePublicCatalog() {
   const [salons, setSalons] = useState<Salon[]>(() =>
-    sampleSalons.map((salon) => ({ ...salon, demoListing: true })),
+    sampleSalons.map((salon) => ({ ...salon, homeService: false, demoListing: true })),
   )
-  const [services, setServices] = useState<ServiceItem[]>(sampleServices)
+  const [services, setServices] = useState<ServiceItem[]>(() =>
+    sampleServices.map((service) => ({ ...service, homeService: false })),
+  )
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -19,12 +21,15 @@ export function usePublicCatalog() {
         const knownSalons = new Map<string, Salon>(
           sampleSalons.map((salon): [string, Salon] => [
             salon.id,
-            { ...salon, demoListing: true },
+            { ...salon, homeService: false, demoListing: true },
           ]),
         )
-        const knownServices = new Map(sampleServices.map((service) => [service.id, service]))
-        catalog.salons.forEach((salon) => knownSalons.set(salon.id, salon))
-        catalog.services.forEach((service) => knownServices.set(service.id, service))
+        const knownServices = new Map(sampleServices.map((service) => [
+          service.id,
+          { ...service, homeService: false },
+        ]))
+        catalog.salons.forEach((salon) => knownSalons.set(salon.id, { ...salon, homeService: false }))
+        catalog.services.forEach((service) => knownServices.set(service.id, { ...service, homeService: false }))
         setSalons([...knownSalons.values()])
         setServices([...knownServices.values()])
         setError('')
@@ -32,8 +37,8 @@ export function usePublicCatalog() {
       .catch((err: unknown) => {
         console.error('Could not load public salon and service catalog:', err)
         if (active) {
-          setSalons(sampleSalons.map((salon) => ({ ...salon, demoListing: true })))
-          setServices(sampleServices)
+          setSalons(sampleSalons.map((salon) => ({ ...salon, homeService: false, demoListing: true })))
+          setServices(sampleServices.map((service) => ({ ...service, homeService: false })))
           setError('Live business listings are temporarily unavailable. Showing demo listings.')
         }
       })

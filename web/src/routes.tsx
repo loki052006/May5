@@ -60,9 +60,6 @@ const ServiceDetailPage = lazy(() =>
 const NewBookingPage = lazy(() =>
   import('./pages/booking/NewBookingPage').then((module) => ({ default: module.NewBookingPage })),
 )
-const BookingLocationPrefPage = lazy(() =>
-  import('./pages/booking/BookingLocationPrefPage').then((module) => ({ default: module.BookingLocationPrefPage })),
-)
 const VendorDashboardPage = lazy(() =>
   import('./pages/vendor/VendorDashboardPage').then((module) => ({ default: module.VendorDashboardPage })),
 )
@@ -139,7 +136,6 @@ export function AppRoutes() {
       <Route path="/salon/:id" element={<SalonDetailPage />} />
       <Route path="/service/:id" element={<ServiceDetailPage />} />
       <Route path="/booking/new/:serviceId" element={<NewBookingPage />} />
-      <Route path="/booking-location-pref" element={<BookingLocationPrefPage />} />
 
       <Route
         path="/customer"
