@@ -3,6 +3,56 @@
 :root {
   --may5-cream: #f5ead8;
   --may5-terracotta: #c67139;
+  .may5-app-promo {
+  margin: 0 16px 12px;
+  padding: 11px 0;
+  overflow: hidden;
+  border-radius: var(--may5-radius-md);
+  background: var(--may5-terracotta);
+  color: var(--may5-white);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.may5-app-promo-viewport {
+  overflow: hidden;
+}
+
+.may5-app-promo-track {
+  display: flex;
+  width: max-content;
+  animation: may5-app-promo-scroll 26s linear infinite;
+}
+
+.may5-app-promo-track span {
+  flex: 0 0 auto;
+  padding-right: 3rem;
+}
+
+.may5-app-promo:hover .may5-app-promo-track {
+  animation-play-state: paused;
+}
+
+@keyframes may5-app-promo-scroll {
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .may5-app-promo-track {
+    animation: none;
+    width: auto;
+    justify-content: center;
+    padding: 0 12px;
+    text-align: center;
+  }
+
+  .may5-app-promo-track span:not(:first-child) {
+    display: none;
+  }
+}
+
   --may5-text: #201e1d;
   --may5-text-secondary: #2e2b25;
   --may5-muted: #82796a;
