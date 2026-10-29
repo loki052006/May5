@@ -51,6 +51,16 @@ export function VendorLayout() {
       <main className="may5-main-panel">
         <header style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20 }}>
           <img src="/may5-brand.png" alt="MAY5 — Sign your style" className="may5-logo" />
+          <NavLink
+            to="/vendor/subscription"
+            className="may5-vendor-subscription-promo"
+            aria-label="Explore MAY5 subscription plans to unlock more business tools"
+          >
+            <span className="may5-vendor-subscription-track" aria-hidden="true">
+              <span>Unlock more business tools with a MAY5 subscription. Explore plans in Subscription.</span>
+              <span>Unlock more business tools with a MAY5 subscription. Explore plans in Subscription.</span>
+            </span>
+          </NavLink>
         </header>
         <Outlet />
       </main>

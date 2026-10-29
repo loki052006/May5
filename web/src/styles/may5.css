@@ -61,6 +61,57 @@ textarea {
   object-fit: contain;
 }
 
+.may5-vendor-subscription-promo {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  min-width: 0;
+  height: 38px;
+  margin-left: 20px;
+  overflow: hidden;
+  border-radius: var(--may5-radius-sm);
+  background: var(--may5-terracotta);
+  color: var(--may5-white);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.may5-vendor-subscription-track {
+  display: flex;
+  width: max-content;
+  animation: may5-vendor-subscription-scroll 28s linear infinite;
+}
+
+.may5-vendor-subscription-track span {
+  flex: 0 0 auto;
+  padding-right: 3rem;
+}
+
+.may5-vendor-subscription-promo:hover .may5-vendor-subscription-track,
+.may5-vendor-subscription-promo:focus-visible .may5-vendor-subscription-track {
+  animation-play-state: paused;
+}
+
+@keyframes may5-vendor-subscription-scroll {
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .may5-vendor-subscription-track {
+    width: auto;
+    animation: none;
+    justify-content: center;
+    padding: 0 12px;
+    text-align: center;
+  }
+
+  .may5-vendor-subscription-track span:not(:first-child) {
+    display: none;
+  }
+}
+
 .may5-mobile-brand {
   display: block;
   width: fit-content;
