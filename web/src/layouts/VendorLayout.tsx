@@ -1,5 +1,4 @@
-import { useEffect, useState } from 'react'
-import { Navigate, NavLink, Outlet, useLocation } from 'react-router-dom'
+import { NavLink, Outlet } from 'react-router-dom'
 import {
   Calendar,
   CreditCard,
@@ -11,7 +10,6 @@ import {
   Users,
 } from 'lucide-react'
 import { useAuth } from '../lib/auth'
-import { loadVendorSubscription } from '../lib/api'
 
 const links = [
   { to: '/vendor/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -26,39 +24,6 @@ const links = [
 
 export function VendorLayout() {
   const { logout } = useAuth()
-  const location = useLocation()
-  const [subscriptionCheck, setSubscriptionCheck] = useState<{
-    pathname: string
-    active: boolean
-  } | null>(null)
-  const onSubscriptionPage = location.pathname === '/vendor/subscription'
-  const subscriptionLoading = subscriptionCheck?.pathname !== location.pathname
-  const subscriptionActive = subscriptionCheck?.pathname === location.pathname && subscriptionCheck.active
-
-  useEffect(() => {
-    let active = true
-    void loadVendorSubscription()
-      .then((result) => {
-        if (active) {
-          setSubscriptionCheck({
-            pathname: location.pathname,
-            active: Boolean(result.subscription),
-          })
-        }
-      })
-      .catch((err: unknown) => {
-        console.error('Could not check provider subscription:', err)
-        if (active) {
-          setSubscriptionCheck({
-            pathname: location.pathname,
-            active: false,
-          })
-        }
-      })
-    return () => {
-      active = false
-    }
-  }, [location.pathname])
 
   return (
     <div className="may5-sidebar-layout">
@@ -87,13 +52,7 @@ export function VendorLayout() {
         <header style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20 }}>
           <img src="/may5-brand.png" alt="MAY5 — Sign your style" className="may5-logo" />
         </header>
-        {subscriptionLoading && !onSubscriptionPage ? (
-          <p role="status">Checking provider subscription…</p>
-        ) : !subscriptionActive && !onSubscriptionPage ? (
-          <Navigate to="/vendor/subscription" replace />
-        ) : (
-          <Outlet />
-        )}
+        <Outlet />
       </main>
     </div>
   )

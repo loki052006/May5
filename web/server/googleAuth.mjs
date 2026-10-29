@@ -417,10 +417,6 @@ app.use('/api/vendor', async (req, res, next) => {
       res.status(403).json({ error: 'Business account required' })
       return
     }
-    if (!getProviderSubscription(user)) {
-      res.status(402).json({ error: 'An active MAY5 provider subscription is required to use business features' })
-      return
-    }
     next()
   } catch (err) {
     console.error('Could not verify provider subscription access:', err)
@@ -1439,10 +1435,6 @@ app.post('/api/bookings', async (req, res) => {
       res.status(404).json({ error: 'The selected business or service is unavailable' })
       return
     }
-    if (!getProviderSubscription(vendor)) {
-      res.status(404).json({ error: 'This business is not currently accepting bookings' })
-      return
-    }
     const preferences = {
       ...defaultVendorPreferences.booking,
       ...(vendor.vendorPreferences?.booking ?? {}),
@@ -1484,8 +1476,6 @@ app.get('/api/catalog', async (_req, res) => {
         businessId: { $type: 'string', $ne: '' },
         businessName: { $type: 'string', $ne: '' },
         address: { $type: 'string', $ne: '' },
-        'vendorSubscription.status': 'active',
-        'vendorSubscription.expiresAt': { $gt: new Date() },
       })
       .project({
         googleId: 1,
