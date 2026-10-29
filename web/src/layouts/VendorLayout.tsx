@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
+import { Navigate, NavLink, Outlet, useLocation } from 'react-router-dom'
 import {
   Calendar,
   CreditCard,
@@ -30,12 +30,10 @@ export function VendorLayout() {
   const [subscriptionCheck, setSubscriptionCheck] = useState<{
     pathname: string
     active: boolean
-    error: string
   } | null>(null)
   const onSubscriptionPage = location.pathname === '/vendor/subscription'
   const subscriptionLoading = subscriptionCheck?.pathname !== location.pathname
   const subscriptionActive = subscriptionCheck?.pathname === location.pathname && subscriptionCheck.active
-  const subscriptionError = subscriptionCheck?.pathname === location.pathname ? subscriptionCheck.error : ''
 
   useEffect(() => {
     let active = true
@@ -45,7 +43,6 @@ export function VendorLayout() {
           setSubscriptionCheck({
             pathname: location.pathname,
             active: Boolean(result.subscription),
-            error: '',
           })
         }
       })
@@ -55,7 +52,6 @@ export function VendorLayout() {
           setSubscriptionCheck({
             pathname: location.pathname,
             active: false,
-            error: err instanceof Error ? err.message : 'Could not check your subscription.',
           })
         }
       })
@@ -93,19 +89,8 @@ export function VendorLayout() {
         </header>
         {subscriptionLoading && !onSubscriptionPage ? (
           <p role="status">Checking provider subscription…</p>
-        ) : subscriptionError && !onSubscriptionPage ? (
-          <div role="alert">
-            <p style={{ color: 'var(--may5-danger)' }}>{subscriptionError}</p>
-            <Link to="/vendor/subscription" className="may5-btn may5-btn-primary">View plans</Link>
-          </div>
         ) : !subscriptionActive && !onSubscriptionPage ? (
-          <section className="may5-card" style={{ padding: 24 }}>
-            <h1>Choose a MAY5 provider plan</h1>
-            <p style={{ color: 'var(--may5-muted)' }}>
-              A subscription is required to use business tools such as services, bookings, staff, and analytics.
-            </p>
-            <Link to="/vendor/subscription" className="may5-btn may5-btn-primary">View subscription plans</Link>
-          </section>
+          <Navigate to="/vendor/subscription" replace />
         ) : (
           <Outlet />
         )}
