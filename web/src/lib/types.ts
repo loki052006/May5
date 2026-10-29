@@ -171,6 +171,7 @@ export interface ServiceItem {
   category: 'popular' | 'other'
   homeService: boolean
   imageUrl?: string
+  imageUrls?: string[]
   description?: string
 }
 

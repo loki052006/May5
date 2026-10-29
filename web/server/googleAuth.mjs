@@ -94,6 +94,7 @@ function toBusinessProfile(user) {
 }
 
 app.use(cors({ origin: true }))
+app.post('/api/vendor/services', express.json({ limit: '36mb' }))
 app.use(express.json({
   limit: '8mb',
   verify: (req, _res, body) => {
@@ -2079,8 +2080,18 @@ app.post('/api/vendor/services', async (req, res) => {
     return
   }
 
-  const { salonId, name, description = '', price, durationMin, category, homeService, imageData } =
-    req.body ?? {}
+  const {
+    salonId,
+    name,
+    description = '',
+    price,
+    durationMin,
+    category,
+    homeService,
+    imageData,
+    imageDatas,
+  } = req.body ?? {}
+  const images = imageDatas === undefined ? [imageData] : imageDatas
   if (
     !user.businessId ||
     typeof salonId !== 'string' ||
@@ -2100,18 +2111,24 @@ app.post('/api/vendor/services', async (req, res) => {
     durationMin > 1440 ||
     !['popular', 'other'].includes(category) ||
     typeof homeService !== 'boolean' ||
-    typeof imageData !== 'string'
+    !Array.isArray(images) ||
+    images.length < 1 ||
+    images.length > 5 ||
+    images.some((image) => typeof image !== 'string')
   ) {
-    res.status(400).json({ error: 'Complete all service fields and upload an image' })
+    res.status(400).json({ error: 'Complete all service fields and upload between 1 and 5 images' })
     return
   }
 
-  const imageMatch = imageData.match(/^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/]+=*)$/)
-  if (!imageMatch || Buffer.from(imageMatch[2], 'base64').length > 5 * 1024 * 1024) {
-    res.status(400).json({ error: 'Upload a JPEG, PNG, or WebP image up to 5 MB' })
-    return
+  for (const image of images) {
+    const imageMatch = image.match(/^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/]+=*)$/)
+    if (!imageMatch || Buffer.from(imageMatch[2], 'base64').length > 5 * 1024 * 1024) {
+      res.status(400).json({ error: 'Upload JPEG, PNG, or WebP images up to 5 MB each' })
+      return
+    }
   }
 
+  const primaryImage = images[0]
   const service = {
     salonId: user.businessId,
     name: name.trim(),
@@ -2121,7 +2138,8 @@ app.post('/api/vendor/services', async (req, res) => {
     category,
     homeService,
     active: true,
-    imageUrl: imageData,
+    imageUrl: primaryImage,
+    imageUrls: images,
     vendorId: user.googleId,
     createdAt: new Date(),
   }

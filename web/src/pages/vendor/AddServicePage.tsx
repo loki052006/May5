@@ -1,10 +1,11 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { createVendorService, loadVendorBusinessProfile } from '../../lib/api'
 import { formatINR } from '../../lib/format'
 import { useAuth } from '../../lib/auth'
 
 const maxImageBytes = 5 * 1024 * 1024
+const maxServiceImages = 5
 
 function readImage(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -32,10 +33,15 @@ export function AddServicePage() {
   const [price, setPrice] = useState('')
   const [durationMin, setDurationMin] = useState('')
   const [category, setCategory] = useState<'popular' | 'other'>('popular')
-  const [imageFile, setImageFile] = useState<File | null>(null)
-  const [imagePreview, setImagePreview] = useState('')
+  const [imageFiles, setImageFiles] = useState<File[]>([])
+  const [imagePreviews, setImagePreviews] = useState<string[]>([])
+  const imagePreviewUrls = useRef<string[]>([])
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+
+  useEffect(() => () => {
+    imagePreviewUrls.current.forEach((url) => URL.revokeObjectURL(url))
+  }, [])
 
   useEffect(() => {
     let active = true
@@ -58,23 +64,38 @@ export function AddServicePage() {
     }
   }, [])
 
-  function onImageChange(file?: File) {
-    setError('')
-    if (!file) {
-      setImageFile(null)
-      setImagePreview('')
+  function onImageChange(files: FileList | null, input: HTMLInputElement) {
+    const selectedFiles = Array.from(files ?? [])
+    input.value = ''
+    if (selectedFiles.length === 0) {
       return
     }
-    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+    if (imageFiles.length + selectedFiles.length > maxServiceImages) {
+      setError(`You can upload up to ${maxServiceImages} images for each service.`)
+      return
+    }
+    if (selectedFiles.some((file) => !['image/jpeg', 'image/png', 'image/webp'].includes(file.type))) {
       setError('Choose a JPEG, PNG, or WebP image.')
       return
     }
-    if (file.size > maxImageBytes) {
-      setError('The service image must be 5 MB or smaller.')
+    if (selectedFiles.some((file) => file.size > maxImageBytes)) {
+      setError('Each service image must be 5 MB or smaller.')
       return
     }
-    setImageFile(file)
-    setImagePreview(URL.createObjectURL(file))
+    const previews = selectedFiles.map((file) => URL.createObjectURL(file))
+    imagePreviewUrls.current.push(...previews)
+    setImageFiles((current) => [...current, ...selectedFiles])
+    setImagePreviews((current) => [...current, ...previews])
+    setError('')
+  }
+
+  function removeImage(index: number) {
+    const preview = imagePreviews[index]
+    URL.revokeObjectURL(preview)
+    imagePreviewUrls.current = imagePreviewUrls.current.filter((url) => url !== preview)
+    setImageFiles((current) => current.filter((_, fileIndex) => fileIndex !== index))
+    setImagePreviews((current) => current.filter((_, previewIndex) => previewIndex !== index))
+    setError('')
   }
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -88,14 +109,14 @@ export function AddServicePage() {
       setError('Save your business name and store location before adding services.')
       return
     }
-    if (!imageFile) {
-      setError('A service image is required.')
+    if (imageFiles.length === 0) {
+      setError('At least one service image is required.')
       return
     }
 
     setSaving(true)
     try {
-      const imageUrl = await readImage(imageFile)
+      const imageUrls = await Promise.all(imageFiles.map(readImage))
       await createVendorService({
         salonId: businessId,
         name,
@@ -104,7 +125,7 @@ export function AddServicePage() {
         durationMin: Number(durationMin),
         category,
         homeService: false,
-        imageUrl,
+        imageUrls,
       })
       navigate('/vendor/services')
     } catch (err) {
@@ -118,7 +139,7 @@ export function AddServicePage() {
     <div>
       <h1>Add service</h1>
       <p style={{ color: 'var(--may5-muted)' }}>
-        Add service details and upload a photo. A photo is required for every service.
+        Add service details and upload up to {maxServiceImages} photos. At least one photo is required.
       </p>
       <form onSubmit={onSubmit} style={{ maxWidth: 560 }}>
         <label htmlFor="service-name">Service name</label>
@@ -189,26 +210,39 @@ export function AddServicePage() {
           <option value="other">Other</option>
         </select>
 
-        <label htmlFor="service-image">Service image (required, up to 5 MB)</label>
+        <label htmlFor="service-image">Service images (up to {maxServiceImages}, 5 MB each)</label>
         <input
           id="service-image"
           className="may5-input"
           type="file"
           accept="image/jpeg,image/png,image/webp"
-          required
-          onChange={(event) => onImageChange(event.target.files?.[0])}
+          multiple
+          disabled={imageFiles.length >= maxServiceImages}
+          onChange={(event) => onImageChange(event.target.files, event.currentTarget)}
           style={{ marginBottom: 12 }}
         />
-        {imagePreview && (
-          <img
-            src={imagePreview}
-            alt="Service preview"
-            style={{ display: 'block', width: '100%', maxHeight: 280, objectFit: 'cover', borderRadius: 12, marginBottom: 16 }}
-          />
+        <p style={{ margin: '0 0 12px', color: 'var(--may5-muted)' }}>
+          {imageFiles.length} of {maxServiceImages} images selected. Select more to add them.
+        </p>
+        {imagePreviews.length > 0 && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 8, marginBottom: 16 }}>
+            {imagePreviews.map((preview, index) => (
+              <div key={preview}>
+                <img
+                  src={preview}
+                  alt={`Service image ${index + 1}`}
+                  style={{ display: 'block', width: '100%', height: 120, objectFit: 'cover', borderRadius: 8 }}
+                />
+                <button type="button" className="may5-btn" onClick={() => removeImage(index)} style={{ marginTop: 4 }}>
+                  Remove image {index + 1}
+                </button>
+              </div>
+            ))}
+          </div>
         )}
 
         {error && <p role="alert" style={{ color: 'var(--may5-danger)' }}>{error}</p>}
-        <button type="submit" className="may5-btn may5-btn-primary" disabled={saving || profileLoading || !businessName || !businessId || !imageFile}>
+        <button type="submit" className="may5-btn may5-btn-primary" disabled={saving || profileLoading || !businessName || !businessId || imageFiles.length === 0}>
           {saving ? 'Saving…' : 'Save service'}
         </button>
         <Link to="/vendor/services" style={{ marginLeft: 12 }}>Cancel</Link>

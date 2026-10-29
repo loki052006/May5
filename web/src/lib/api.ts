@@ -209,13 +209,14 @@ export function saveVendorBusinessProfile(
 }
 
 export function createVendorService(
-  service: Omit<ServiceItem, 'id'> & { imageUrl: string },
+  service: Omit<ServiceItem, 'id' | 'imageUrl' | 'imageUrls'> & { imageUrls: string[] },
 ): Promise<VendorService> {
+  const { imageUrls, ...details } = service
   return request<VendorService>('/api/vendor/services', {
     method: 'POST',
     body: JSON.stringify({
-      ...service,
-      imageData: service.imageUrl,
+      ...details,
+      imageDatas: imageUrls,
     }),
   })
 }

@@ -32,8 +32,12 @@ export function ServiceDetailPage() {
         </p>
         <p style={{ color: 'var(--may5-muted)' }}>Store: {salon.name} · {salon.address}</p>
         {svc.description && <p>{svc.description}</p>}
-        {svc.imageUrl && (
-          <img src={svc.imageUrl} alt={svc.name} style={{ width: '100%', maxHeight: 320, objectFit: 'cover', borderRadius: 12 }} />
+        {(svc.imageUrls?.length ? svc.imageUrls : svc.imageUrl ? [svc.imageUrl] : []).length > 0 && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 8 }}>
+            {(svc.imageUrls?.length ? svc.imageUrls : svc.imageUrl ? [svc.imageUrl] : []).map((image, index) => (
+              <img key={`${svc.id}-image-${index}`} src={image} alt={`${svc.name} image ${index + 1}`} style={{ width: '100%', maxHeight: 320, objectFit: 'cover', borderRadius: 12 }} />
+            ))}
+          </div>
         )}
         {salon.description && <p style={{ marginTop: 16 }}>{salon.description}</p>}
         <Link

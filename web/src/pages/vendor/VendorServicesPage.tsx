@@ -93,8 +93,12 @@ export function VendorServicesPage() {
       )}
       {services.map((service) => (
         <article key={service.id} className="may5-card" style={{ padding: 12, marginBottom: 12 }}>
-          {service.imageUrl && (
-            <img src={service.imageUrl} alt={service.name} style={{ width: '100%', maxHeight: 240, objectFit: 'cover', borderRadius: 8 }} />
+          {(service.imageUrls?.length ? service.imageUrls : service.imageUrl ? [service.imageUrl] : []).length > 0 && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 8 }}>
+              {(service.imageUrls?.length ? service.imageUrls : service.imageUrl ? [service.imageUrl] : []).map((image, index) => (
+                <img key={`${service.id}-image-${index}`} src={image} alt={`${service.name} image ${index + 1}`} style={{ width: '100%', height: 160, objectFit: 'cover', borderRadius: 8 }} />
+              ))}
+            </div>
           )}
           {editingId === service.id && edit ? (
             <form onSubmit={(event) => void saveEdit(event)} style={{ display: 'grid', gap: 8, marginTop: 12 }}>
