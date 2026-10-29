@@ -84,6 +84,9 @@ const VendorAnalyticsPage = lazy(() =>
 const VendorSettingsPage = lazy(() =>
   import('./pages/vendor/VendorSettingsPage').then((module) => ({ default: module.VendorSettingsPage })),
 )
+const VendorSubscriptionPage = lazy(() =>
+  import('./pages/vendor/VendorSubscriptionPage').then((module) => ({ default: module.VendorSubscriptionPage })),
+)
 const VendorBookingPrefsPage = lazy(() =>
   import('./pages/vendor/VendorBookingPrefsPage').then((module) => ({ default: module.VendorBookingPrefsPage })),
 )
@@ -176,6 +179,7 @@ export function AppRoutes() {
         <Route path="booking-prefs" element={<VendorBookingPrefsPage section="booking" />} />
         <Route path="customer-management" element={<VendorBookingPrefsPage section="customer" />} />
         <Route path="add-service" element={<AddServicePage />} />
+        <Route path="subscription" element={<VendorSubscriptionPage />} />
         <Route path="billing" element={stub('Billing', '/(vendor)/billing', '/vendor/more')} />
         <Route path="portfolio" element={<VendorContentPage kind="portfolio" />} />
         <Route path="packages" element={<VendorContentPage kind="packages" />} />

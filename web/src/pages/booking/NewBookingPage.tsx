@@ -3,46 +3,8 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { staff } from '../../lib/mockData'
 import { store } from '../../lib/store'
 import { useAuth } from '../../lib/auth'
-import { createGoogleBooking, createRazorpayOrder, verifyRazorpayPayment } from '../../lib/api'
-import type { PaymentMode } from '../../lib/types'
+import { createGoogleBooking } from '../../lib/api'
 import { usePublicCatalog } from '../../lib/usePublicCatalog'
-
-interface RazorpayCheckoutResponse {
-  razorpay_order_id: string
-  razorpay_payment_id: string
-  razorpay_signature: string
-}
-
-interface RazorpayCheckoutOptions {
-  key: string
-  amount: number
-  currency: string
-  name: string
-  description: string
-  order_id: string
-  prefill: { name: string; email: string; contact: string }
-  handler: (response: RazorpayCheckoutResponse) => void
-  modal: { ondismiss: () => void }
-  theme: { color: string }
-}
-
-declare global {
-  interface Window {
-    Razorpay?: new (options: RazorpayCheckoutOptions) => { open: () => void }
-  }
-}
-
-function loadRazorpayCheckout() {
-  if (window.Razorpay) return Promise.resolve()
-  return new Promise<void>((resolve, reject) => {
-    const script = document.createElement('script')
-    script.src = 'https://checkout.razorpay.com/v1/checkout.js'
-    script.async = true
-    script.onload = () => window.Razorpay ? resolve() : reject(new Error('Payment checkout could not be initialized.'))
-    script.onerror = () => reject(new Error('Could not load Razorpay checkout. Check your connection and try again.'))
-    document.head.appendChild(script)
-  })
-}
 
 function localDateTimeMinimum() {
   const now = new Date()
@@ -56,12 +18,10 @@ export function NewBookingPage() {
   const svc = services.find((s) => s.id === serviceId)
   const salon = salons.find((s) => s.id === svc?.salonId)
   const { user } = useAuth()
-  const remote = user?.authProvider === 'google' || user?.authProvider === 'demo'
   const navigate = useNavigate()
   const [staffId, setStaffId] = useState('')
   const [when, setWhen] = useState('')
-  const [paymentMode, setPaymentMode] = useState<PaymentMode>('online')
-  const [acknowledgeDemoPayment, setAcknowledgeDemoPayment] = useState(false)
+  const [acknowledgeDemoListing, setAcknowledgeDemoListing] = useState(false)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
 
@@ -83,10 +43,8 @@ export function NewBookingPage() {
       setError('Choose a future appointment date and time.')
       return
     }
-    if (salonRef.demoListing && !acknowledgeDemoPayment) {
-      setError(paymentMode === 'online'
-        ? 'Confirm that you understand this demo service is illustrative and not redeemable.'
-        : 'Confirm that you understand this demo listing is not a real store.')
+    if (salonRef.demoListing && !acknowledgeDemoListing) {
+      setError('Confirm that you understand this demo listing is not a real store.')
       return
     }
     setSaving(true)
@@ -96,38 +54,9 @@ export function NewBookingPage() {
         serviceId: service.id,
         staffId: staffId || undefined,
         scheduledAt: scheduledAt.toISOString(),
-        paymentMode,
       }
       let booking
-      if (paymentMode === 'online') {
-        if (!remote) throw new Error('Online payments require an authenticated MAY5 account.')
-        const order = await createRazorpayOrder({
-          ...bookingDetails,
-          ...(salonRef.demoListing ? { acknowledgeDemoPayment: true } : {}),
-        })
-        await loadRazorpayCheckout()
-        if (!window.Razorpay) throw new Error('Payment checkout is unavailable. Please try again.')
-        const payment = await new Promise<RazorpayCheckoutResponse>((resolve, reject) => {
-          const checkout = new window.Razorpay!({
-            key: order.keyId,
-            amount: order.amount,
-            currency: order.currency,
-            name: order.businessName || 'MAY5',
-            description: `${order.serviceName} appointment`,
-            order_id: order.orderId,
-            prefill: {
-              name: order.customerName,
-              email: order.customerEmail,
-              contact: order.customerPhone,
-            },
-            handler: resolve,
-            modal: { ondismiss: () => reject(new Error('Payment cancelled. You can try again.')) },
-            theme: { color: '#c67139' },
-          })
-          checkout.open()
-        })
-        booking = await verifyRazorpayPayment(payment)
-      } else if (remote) {
+      if (user.authProvider === 'google' || user.authProvider === 'demo') {
         booking = await createGoogleBooking({
           ...bookingDetails,
           ...(salonRef.demoListing ? { acknowledgeDemoOffline: true } : {}),
@@ -137,6 +66,7 @@ export function NewBookingPage() {
           id: `bk-${Date.now()}`,
           customerId: user.id,
           ...bookingDetails,
+          paymentMode: 'offline' as const,
           status: 'scheduled' as const,
           ...(salonRef.demoListing ? { demoListing: true } : {}),
           mediaAuthorized: false,
@@ -158,11 +88,9 @@ export function NewBookingPage() {
       <p>
         {service.name} at {salonRef.name}
       </p>
-      {salonRef.demoListing && remote && (
+      {salonRef.demoListing && (
         <p className="may5-tag" role="status">
-          {paymentMode === 'online'
-            ? 'Demo listing — this is not a real business or redeemable appointment. Continuing to Razorpay will charge real money.'
-            : 'Demo listing — this is not a real store or redeemable appointment. No cash is due; this is only a sample booking.'}
+          Demo listing — this is not a real store or redeemable service. This sample booking does not reserve a real appointment, and no payment is due.
         </p>
       )}
       <form onSubmit={onSubmit} style={{ marginTop: 16 }}>
@@ -191,45 +119,21 @@ export function NewBookingPage() {
           <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 16 }}>
             <input
               type="checkbox"
-              checked={acknowledgeDemoPayment}
-              onChange={(e) => setAcknowledgeDemoPayment(e.target.checked)}
+              checked={acknowledgeDemoListing}
+              onChange={(e) => setAcknowledgeDemoListing(e.target.checked)}
               required
               style={{ marginTop: 4 }}
             />
-            <span>{paymentMode === 'online'
-              ? `I understand this is an illustrative demo listing, the service is not redeemable, and I will be charged ₹${service.price.toLocaleString('en-IN')} if I complete payment.`
-              : 'I understand this is an illustrative demo listing, not a real store, and this sample booking does not reserve a real service or require cash payment.'}</span>
+            <span>I understand this is an illustrative demo listing, not a real store, and this sample booking does not reserve a real service or require payment.</span>
           </label>
         )}
 
-        <label>{salonRef.advancePaymentRequired ? 'Online payment required' : 'Payment'}</label>
-        <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-          <button
-            type="button"
-            className={`may5-chip ${paymentMode === 'online' ? 'active' : ''}`}
-            onClick={() => {
-              setPaymentMode('online')
-              setAcknowledgeDemoPayment(false)
-            }}
-          >
-            {salonRef.demoListing ? 'Pay with live gateway' : 'Pay online'}
-          </button>
-          {!salonRef.advancePaymentRequired && (
-            <button
-              type="button"
-              className={`may5-chip ${paymentMode === 'offline' ? 'active' : ''}`}
-              onClick={() => {
-                setPaymentMode('offline')
-                setAcknowledgeDemoPayment(false)
-              }}
-            >
-              {salonRef.demoListing ? 'Pay at store (demo only)' : 'Pay at store'}
-            </button>
-          )}
-        </div>
+        <p style={{ color: 'var(--may5-muted)' }}>
+          No payment is collected through MAY5 when you book. Pay the service provider directly at the store.
+        </p>
 
         <button type="submit" className="may5-btn may5-btn-primary" style={{ width: '100%' }} disabled={saving}>
-          {saving ? (paymentMode === 'online' ? 'Opening secure checkout…' : 'Saving booking…') : paymentMode === 'online' ? salonRef.demoListing ? 'Continue to live checkout' : 'Continue to payment' : 'Confirm booking'}
+          {saving ? 'Confirming booking…' : 'Confirm booking'}
         </button>
         {error && <p role="alert" style={{ color: 'var(--may5-danger)' }}>{error}</p>}
       </form>

@@ -71,7 +71,6 @@ export interface Salon {
   website?: string
   openingHours?: string
   amenities?: string[]
-  advancePaymentRequired?: boolean
   packages?: Array<{
     id: string
     title: string
@@ -113,12 +112,44 @@ export interface VendorBusinessProfile {
   lng: number | null
 }
 
+export interface ProviderSubscriptionPlan {
+  id: string
+  name: string
+  durationMonths: number
+  priceRupees: number
+  originalPriceRupees: number
+  discountPercent: number
+}
+
+export interface ProviderSubscription {
+  planId: string
+  status: 'active'
+  startsAt: string
+  expiresAt: string
+}
+
+export interface VendorSubscriptionCatalog {
+  plans: ProviderSubscriptionPlan[]
+  subscription: ProviderSubscription | null
+}
+
+export interface ProviderSubscriptionOrder {
+  orderId: string
+  amount: number
+  currency: string
+  keyId: string
+  businessName: string
+  providerName: string
+  providerEmail: string
+  providerPhone: string
+  planName: string
+}
+
 export interface VendorPreferences {
   booking: {
     acceptInstantBooking: boolean
     requiresApproval: boolean
     advanceBookingRequired: boolean
-    advancePaymentRequired: boolean
     numberOfSlots: number
     cancellationPolicy: string
   }

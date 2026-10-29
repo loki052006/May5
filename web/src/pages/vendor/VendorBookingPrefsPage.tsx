@@ -8,7 +8,6 @@ const defaults: VendorPreferences = {
     acceptInstantBooking: true,
     requiresApproval: false,
     advanceBookingRequired: false,
-    advancePaymentRequired: false,
     numberOfSlots: 1,
     cancellationPolicy: '',
   },
@@ -21,14 +20,13 @@ const defaults: VendorPreferences = {
   },
 }
 
-type BookingToggle = 'acceptInstantBooking' | 'requiresApproval' | 'advanceBookingRequired' | 'advancePaymentRequired'
+type BookingToggle = 'acceptInstantBooking' | 'requiresApproval' | 'advanceBookingRequired'
 type CustomerToggle = 'enableCustomerHistory' | 'enableAppointmentReminders' | 'enablePromotionalMessages'
 
 const bookingOptions: Array<[BookingToggle, string]> = [
   ['acceptInstantBooking', 'Accept instant booking'],
   ['requiresApproval', 'Booking requires approval'],
   ['advanceBookingRequired', 'Advance booking required'],
-  ['advancePaymentRequired', 'Advance payment required'],
 ]
 
 const customerOptions: Array<[CustomerToggle, string]> = [

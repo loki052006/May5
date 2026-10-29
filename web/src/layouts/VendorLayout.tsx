@@ -1,6 +1,8 @@
-import { NavLink, Outlet } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
 import {
   Calendar,
+  CreditCard,
   Ellipsis,
   LayoutDashboard,
   LogOut,
@@ -9,6 +11,7 @@ import {
   Users,
 } from 'lucide-react'
 import { useAuth } from '../lib/auth'
+import { loadVendorSubscription } from '../lib/api'
 
 const links = [
   { to: '/vendor/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -17,11 +20,49 @@ const links = [
   { to: '/vendor/customers', label: 'Customers', icon: Users },
   { to: '/vendor/services', label: 'Services', icon: Scissors },
   { to: '/vendor/settings', label: 'Settings', icon: Settings },
+  { to: '/vendor/subscription', label: 'Subscription', icon: CreditCard },
   { to: '/vendor/more', label: 'More', icon: Ellipsis },
 ]
 
 export function VendorLayout() {
   const { logout } = useAuth()
+  const location = useLocation()
+  const [subscriptionCheck, setSubscriptionCheck] = useState<{
+    pathname: string
+    active: boolean
+    error: string
+  } | null>(null)
+  const onSubscriptionPage = location.pathname === '/vendor/subscription'
+  const subscriptionLoading = subscriptionCheck?.pathname !== location.pathname
+  const subscriptionActive = subscriptionCheck?.pathname === location.pathname && subscriptionCheck.active
+  const subscriptionError = subscriptionCheck?.pathname === location.pathname ? subscriptionCheck.error : ''
+
+  useEffect(() => {
+    let active = true
+    void loadVendorSubscription()
+      .then((result) => {
+        if (active) {
+          setSubscriptionCheck({
+            pathname: location.pathname,
+            active: Boolean(result.subscription),
+            error: '',
+          })
+        }
+      })
+      .catch((err: unknown) => {
+        console.error('Could not check provider subscription:', err)
+        if (active) {
+          setSubscriptionCheck({
+            pathname: location.pathname,
+            active: false,
+            error: err instanceof Error ? err.message : 'Could not check your subscription.',
+          })
+        }
+      })
+    return () => {
+      active = false
+    }
+  }, [location.pathname])
 
   return (
     <div className="may5-sidebar-layout">
@@ -50,7 +91,24 @@ export function VendorLayout() {
         <header style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20 }}>
           <img src="/may5-brand.png" alt="MAY5 — Sign your style" className="may5-logo" />
         </header>
-        <Outlet />
+        {subscriptionLoading && !onSubscriptionPage ? (
+          <p role="status">Checking provider subscription…</p>
+        ) : subscriptionError && !onSubscriptionPage ? (
+          <div role="alert">
+            <p style={{ color: 'var(--may5-danger)' }}>{subscriptionError}</p>
+            <Link to="/vendor/subscription" className="may5-btn may5-btn-primary">View plans</Link>
+          </div>
+        ) : !subscriptionActive && !onSubscriptionPage ? (
+          <section className="may5-card" style={{ padding: 24 }}>
+            <h1>Choose a MAY5 provider plan</h1>
+            <p style={{ color: 'var(--may5-muted)' }}>
+              A subscription is required to use business tools such as services, bookings, staff, and analytics.
+            </p>
+            <Link to="/vendor/subscription" className="may5-btn may5-btn-primary">View subscription plans</Link>
+          </section>
+        ) : (
+          <Outlet />
+        )}
       </main>
     </div>
   )

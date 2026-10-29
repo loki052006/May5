@@ -65,7 +65,6 @@ const defaultVendorPreferences = {
     acceptInstantBooking: true,
     requiresApproval: false,
     advanceBookingRequired: false,
-    advancePaymentRequired: false,
     numberOfSlots: 1,
     cancellationPolicy: '',
   },
@@ -77,6 +76,17 @@ const defaultVendorPreferences = {
     customReminderHours: 2,
   },
 }
+
+const providerSubscriptionPlans = [
+  { id: 'monthly', name: '1 month', durationMonths: 1, priceRupees: 199, originalPriceRupees: 199, discountPercent: 0 },
+  { id: 'quarterly', name: '3 months', durationMonths: 3, priceRupees: 499, originalPriceRupees: 597, discountPercent: 16 },
+  { id: 'half-yearly', name: '6 months', durationMonths: 6, priceRupees: 899, originalPriceRupees: 1194, discountPercent: 25 },
+  { id: 'yearly', name: '12 months', durationMonths: 12, priceRupees: 1599, originalPriceRupees: 2388, discountPercent: 33 },
+]
+
+const providerSubscriptionPlansById = new Map(
+  providerSubscriptionPlans.map((plan) => [plan.id, plan]),
+)
 
 function toBusinessProfile(user) {
   return {
@@ -293,6 +303,57 @@ async function recordCapturedPayment(order, payment) {
   return { ...booking, id: inserted.insertedId.toString() }
 }
 
+async function recordCapturedProviderSubscription(order, payment) {
+  const plan = providerSubscriptionPlansById.get(order.planId)
+  if (!plan || order.amount !== plan.priceRupees * 100 || order.currency !== 'INR') {
+    throw new Error('Provider subscription order does not match an available plan')
+  }
+
+  const startsAt = {
+    $cond: [
+      { $gt: ['$vendorSubscription.expiresAt', '$$NOW'] },
+      '$vendorSubscription.expiresAt',
+      '$$NOW',
+    ],
+  }
+  const updatedUser = await users.findOneAndUpdate(
+    {
+      googleId: order.userId,
+      role: 'vendor',
+      'vendorSubscription.lastAppliedOrderId': { $ne: order.razorpayOrderId },
+    },
+    [{
+      $set: {
+        vendorSubscription: {
+          planId: { $literal: plan.id },
+          status: { $literal: 'active' },
+          startsAt,
+          expiresAt: { $dateAdd: { startDate: startsAt, unit: 'month', amount: plan.durationMonths } },
+          lastAppliedOrderId: { $literal: order.razorpayOrderId },
+          paymentId: { $literal: payment.id },
+          amount: { $literal: order.amount },
+        },
+        updatedAt: '$$NOW',
+      },
+    }],
+    { returnDocument: 'after' },
+  )
+
+  let user = updatedUser
+  if (!user) {
+    user = await users.findOne({ googleId: order.userId, role: 'vendor' })
+    if (user?.vendorSubscription?.lastAppliedOrderId !== order.razorpayOrderId) {
+      throw new Error('Provider account was not found for the paid subscription')
+    }
+  }
+
+  await paymentOrders.updateOne(
+    { _id: order._id },
+    { $set: { status: 'paid', paymentId: payment.id, paidAt: new Date() } },
+  )
+  return getProviderSubscription(user)
+}
+
 function setSessionCookie(res, token) {
   const secure = process.env.NODE_ENV === 'production' ? '; Secure' : ''
   res.setHeader(
@@ -321,6 +382,51 @@ async function authenticatedUser(req) {
 
   return users.findOne({ googleId: session.userId })
 }
+
+function getProviderSubscription(user) {
+  const subscription = user.vendorSubscription
+  if (
+    !subscription ||
+    subscription.status !== 'active' ||
+    !(subscription.startsAt instanceof Date) ||
+    !(subscription.expiresAt instanceof Date) ||
+    subscription.expiresAt <= new Date()
+  ) {
+    return null
+  }
+  return {
+    planId: subscription.planId,
+    status: 'active',
+    startsAt: subscription.startsAt.toISOString(),
+    expiresAt: subscription.expiresAt.toISOString(),
+  }
+}
+
+app.use('/api/vendor', async (req, res, next) => {
+  if (['/profile', '/subscription', '/subscription/order'].includes(req.path)) {
+    next()
+    return
+  }
+  try {
+    const user = await authenticatedUser(req)
+    if (!user) {
+      res.status(401).json({ error: 'Authentication required' })
+      return
+    }
+    if (user.role !== 'vendor') {
+      res.status(403).json({ error: 'Business account required' })
+      return
+    }
+    if (!getProviderSubscription(user)) {
+      res.status(402).json({ error: 'An active MAY5 provider subscription is required to use business features' })
+      return
+    }
+    next()
+  } catch (err) {
+    console.error('Could not verify provider subscription access:', err)
+    res.status(500).json({ error: 'Could not verify provider subscription' })
+  }
+})
 
 function toUserProfile(user) {
   return {
@@ -1036,114 +1142,9 @@ app.patch('/api/favorites', async (req, res) => {
 })
 
 app.post('/api/payments/razorpay/order', async (req, res) => {
-  try {
-    const user = await authenticatedUser(req)
-    if (!user) {
-      res.status(401).json({ error: 'Authentication required' })
-      return
-    }
-    if (user.role !== 'customer') {
-      res.status(403).json({ error: 'Customer account required' })
-      return
-    }
-    const { salonId, serviceId, staffId, scheduledAt } = req.body ?? {}
-    const demoService = demoServices.get(serviceId)
-    const isDemoListing = Boolean(demoService)
-    if (isDemoListing && req.body?.acknowledgeDemoPayment !== true) {
-      res.status(400).json({ error: 'Confirm that this illustrative demo service is not redeemable before paying' })
-      return
-    }
-    if (typeof salonId !== 'string' || !salonId.trim()) {
-      res.status(400).json({ error: 'Choose a valid business' })
-      return
-    }
-    if (
-      (isDemoListing && (demoService.salonId !== salonId || !demoSalonNames.has(salonId))) ||
-      (!isDemoListing && (typeof serviceId !== 'string' || !ObjectId.isValid(serviceId)))
-    ) {
-      res.status(400).json({ error: 'Choose a service from a live business listing' })
-      return
-    }
-    if (staffId !== undefined && (typeof staffId !== 'string' || staffId.length > 120)) {
-      res.status(400).json({ error: 'Choose a valid staff member' })
-      return
-    }
-    if (typeof scheduledAt !== 'string' || !Number.isFinite(Date.parse(scheduledAt)) || Date.parse(scheduledAt) <= Date.now()) {
-      res.status(400).json({ error: 'Choose a future appointment date and time' })
-      return
-    }
-    const [vendor, service] = isDemoListing
-      ? [
-          { businessName: demoSalonNames.get(salonId) },
-          demoService,
-        ]
-      : await Promise.all([
-          users.findOne({ role: 'vendor', businessId: salonId }),
-          vendorServices.findOne({
-            _id: new ObjectId(serviceId),
-            salonId,
-            active: { $ne: false },
-          }),
-        ])
-    if (!vendor || !service) {
-      res.status(404).json({ error: 'The selected business or service is unavailable' })
-      return
-    }
-    if (vendor.vendorPreferences?.booking?.advancePaymentRequired && !service.price) {
-      res.status(400).json({ error: 'This appointment cannot be paid online' })
-      return
-    }
-    const amount = Math.round(service.price * 100)
-    if (!Number.isSafeInteger(amount) || amount < 100 || amount > 100_000_000) {
-      res.status(400).json({ error: 'Service price is outside the supported payment range' })
-      return
-    }
-    const preferences = {
-      ...defaultVendorPreferences.booking,
-      ...(vendor.vendorPreferences?.booking ?? {}),
-    }
-
-    const receipt = `m5${randomBytes(18).toString('hex')}`
-    const order = await razorpayRequest('/orders', {
-      method: 'POST',
-      body: JSON.stringify({
-        amount,
-        currency: 'INR',
-        receipt,
-        notes: { serviceId, salonId, customerId: user.googleId },
-      }),
-    })
-    await paymentOrders.insertOne({
-      razorpayOrderId: order.id,
-      userId: user.googleId,
-      salonId,
-      serviceId,
-      ...(staffId ? { staffId } : {}),
-      scheduledAt: new Date(scheduledAt).toISOString(),
-      serviceName: service.name,
-      amount,
-      currency: 'INR',
-      requiresApproval: !preferences.acceptInstantBooking || preferences.requiresApproval,
-      ...(isDemoListing ? { isDemo: true, demoPaymentAcknowledgedAt: new Date() } : {}),
-      paymentEnvironment: 'live',
-      status: 'created',
-      createdAt: new Date(),
-    })
-    res.status(201).json({
-      orderId: order.id,
-      amount: order.amount,
-      currency: order.currency,
-      keyId: process.env.RAZORPAY_KEY_ID,
-      businessName: vendor.businessName,
-      serviceName: service.name,
-      customerName: user.fullName ?? '',
-      customerEmail: user.email ?? '',
-      customerPhone: user.phone ?? '',
-    })
-  } catch (err) {
-    console.error('Could not create Razorpay payment order:', err)
-    res.status(err.status ?? 502).json({ error: err.message ?? 'Could not start online payment' })
-  }
+  res.status(410).json({
+    error: 'MAY5 no longer accepts service payments during booking. Pay the service provider directly at the store.',
+  })
 })
 
 app.post('/api/payments/razorpay/webhook', async (req, res) => {
@@ -1196,7 +1197,11 @@ app.post('/api/payments/razorpay/webhook', async (req, res) => {
       res.status(400).json({ error: 'Captured payment does not match its order' })
       return
     }
-    await recordCapturedPayment(order, payment)
+    if (order.purpose === 'provider_subscription') {
+      await recordCapturedProviderSubscription(order, payment)
+    } else {
+      await recordCapturedPayment(order, payment)
+    }
     res.status(200).json({ received: true })
   } catch (err) {
     console.error('Could not process captured-payment webhook:', err)
@@ -1226,13 +1231,18 @@ app.post('/api/payments/razorpay/verify', async (req, res) => {
       res.status(404).json({ error: 'Payment order not found' })
       return
     }
-    if (order.status === 'paid' && order.bookingId) {
-      const existingBooking = await bookings.findOne({ _id: order.bookingId, customerId: user.googleId })
-      if (!existingBooking) {
-        res.status(409).json({ error: 'Payment was received, but its booking needs support assistance' })
+    if (order.purpose !== 'provider_subscription' || user.role !== 'vendor') {
+      res.status(410).json({ error: 'MAY5 no longer accepts service payments during booking' })
+      return
+    }
+    if (order.status === 'paid') {
+      const currentUser = await users.findOne({ googleId: user.googleId, role: 'vendor' })
+      const subscription = currentUser && getProviderSubscription(currentUser)
+      if (!subscription) {
+        res.status(409).json({ error: 'Payment was received, but the provider subscription needs support assistance' })
         return
       }
-      res.json({ ...existingBooking, id: existingBooking._id.toString() })
+      res.json(subscription)
       return
     }
     const testMode = order.paymentEnvironment === 'test'
@@ -1261,14 +1271,99 @@ app.post('/api/payments/razorpay/verify', async (req, res) => {
       payment.amount !== order.amount ||
       payment.currency !== order.currency
     ) {
-      res.status(402).json({ error: 'Payment has not been captured for this appointment' })
+      res.status(402).json({ error: 'Payment has not been captured for this subscription' })
       return
     }
-    const booking = await recordCapturedPayment(order, payment)
-    res.status(201).json(booking)
+    const subscription = await recordCapturedProviderSubscription(order, payment)
+    if (!subscription) {
+      res.status(409).json({ error: 'Payment was captured, but the subscription is not active yet' })
+      return
+    }
+    res.status(201).json(subscription)
   } catch (err) {
     console.error('Could not verify Razorpay payment:', err)
     res.status(err.status ?? 500).json({ error: err.message ?? 'Could not verify payment' })
+  }
+})
+
+app.get('/api/vendor/subscription', async (req, res) => {
+  try {
+    const user = await authenticatedUser(req)
+    if (!user) {
+      res.status(401).json({ error: 'Authentication required' })
+      return
+    }
+    if (user.role !== 'vendor') {
+      res.status(403).json({ error: 'Business account required' })
+      return
+    }
+    res.json({
+      plans: providerSubscriptionPlans,
+      subscription: getProviderSubscription(user),
+    })
+  } catch (err) {
+    console.error('Could not load provider subscription:', err)
+    res.status(500).json({ error: 'Could not load provider subscription' })
+  }
+})
+
+app.post('/api/vendor/subscription/order', async (req, res) => {
+  try {
+    const user = await authenticatedUser(req)
+    if (!user) {
+      res.status(401).json({ error: 'Authentication required' })
+      return
+    }
+    if (user.role !== 'vendor') {
+      res.status(403).json({ error: 'Business account required' })
+      return
+    }
+
+    const plan = providerSubscriptionPlansById.get(req.body?.planId)
+    if (!plan) {
+      res.status(400).json({ error: 'Choose a valid provider subscription plan' })
+      return
+    }
+    const amount = plan.priceRupees * 100
+    const order = await razorpayRequest('/orders', {
+      method: 'POST',
+      body: JSON.stringify({
+        amount,
+        currency: 'INR',
+        receipt: `m5${randomBytes(18).toString('hex')}`,
+        notes: {
+          purpose: 'provider_subscription',
+          planId: plan.id,
+          providerId: user.googleId,
+        },
+      }),
+    })
+    await paymentOrders.insertOne({
+      razorpayOrderId: order.id,
+      userId: user.googleId,
+      purpose: 'provider_subscription',
+      planId: plan.id,
+      durationMonths: plan.durationMonths,
+      amount,
+      currency: 'INR',
+      paymentEnvironment: 'live',
+      status: 'created',
+      createdAt: new Date(),
+    })
+    res.status(201).json({
+      orderId: order.id,
+      amount: order.amount,
+      currency: order.currency,
+      keyId: process.env.RAZORPAY_KEY_ID,
+      businessName: user.businessName || 'MAY5 provider',
+      providerName: user.fullName ?? '',
+      providerEmail: user.email ?? '',
+      providerPhone: user.phone ?? '',
+      planName: plan.name,
+    })
+  } catch (err) {
+    console.error('Could not create provider subscription order:', err)
+    res.status(err.status ?? 502).json({ error: err.message ?? 'Could not start provider subscription checkout' })
   }
 })
 
@@ -1310,7 +1405,7 @@ app.post('/api/bookings', async (req, res) => {
       return
     }
     if (paymentMode !== 'offline') {
-      res.status(400).json({ error: 'Online bookings must be paid through checkout' })
+      res.status(400).json({ error: 'MAY5 does not collect service payments during booking. Pay directly with the business.' })
       return
     }
     if (isDemoListing) {
@@ -1344,8 +1439,8 @@ app.post('/api/bookings', async (req, res) => {
       res.status(404).json({ error: 'The selected business or service is unavailable' })
       return
     }
-    if (vendor.vendorPreferences?.booking?.advancePaymentRequired) {
-      res.status(400).json({ error: 'This business requires online payment for bookings' })
+    if (!getProviderSubscription(vendor)) {
+      res.status(404).json({ error: 'This business is not currently accepting bookings' })
       return
     }
     const preferences = {
@@ -1389,6 +1484,8 @@ app.get('/api/catalog', async (_req, res) => {
         businessId: { $type: 'string', $ne: '' },
         businessName: { $type: 'string', $ne: '' },
         address: { $type: 'string', $ne: '' },
+        'vendorSubscription.status': 'active',
+        'vendorSubscription.expiresAt': { $gt: new Date() },
       })
       .project({
         googleId: 1,
@@ -1491,7 +1588,6 @@ app.get('/api/catalog', async (_req, res) => {
         website: record.website,
         openingHours: record.openingHours,
         amenities: record.amenities ?? [],
-        advancePaymentRequired: record.vendorPreferences?.booking?.advancePaymentRequired === true,
         packages: vendorContent.packages,
         portfolio: vendorContent.portfolio,
         openingDays: record.openingDays ?? [],
@@ -1695,7 +1791,6 @@ app.patch('/api/vendor/preferences', async (req, res) => {
       'acceptInstantBooking',
       'requiresApproval',
       'advanceBookingRequired',
-      'advancePaymentRequired',
     ]
     const customerBooleanFields = [
       'enableCustomerHistory',

@@ -28,13 +28,13 @@ export function CustomerBookingsPage() {
                   {salon?.name} · {formatIndianDate(b.scheduledAt)}
                 </p>
                 <p style={{ margin: 0, fontSize: '0.85rem' }}>
-                  Status: {b.status} · Payment: {b.paymentMode}
+                  Status: {b.status} · Payment: {b.paymentMode === 'offline' ? 'Pay at store' : 'Paid online'}
                 </p>
                 {b.demoListing && (
                   <span className="may5-tag">
                     {b.paymentMode === 'offline'
                       ? 'Demo booking · no real store or service; no cash is due'
-                      : 'Demo booking · payment is real; service is illustrative and not redeemable'}
+                      : 'Demo booking · illustrative service; not redeemable'}
                   </span>
                 )}
               </div>

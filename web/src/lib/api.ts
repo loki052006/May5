@@ -1,4 +1,4 @@
-import type { Booking, Branch, CustomerNotification, CustomerSettings, Salon, ServiceItem, UserProfile, UserRole, VendorBooking, VendorBusinessProfile, VendorContent, VendorCustomer, VendorPreferences, VendorStaff } from './types'
+import type { Booking, Branch, CustomerNotification, CustomerSettings, ProviderSubscriptionOrder, Salon, ServiceItem, UserProfile, UserRole, VendorBooking, VendorBusinessProfile, VendorContent, VendorCustomer, VendorPreferences, VendorStaff, VendorSubscriptionCatalog } from './types'
 
 export class ApiError extends Error {
   readonly status: number
@@ -134,26 +134,14 @@ export function setGoogleFavorite(salonId: string, favorite: boolean): Promise<v
 }
 
 export function createGoogleBooking(
-  booking: Pick<Booking, 'salonId' | 'serviceId' | 'staffId' | 'scheduledAt' | 'paymentMode'> & {
+  booking: Pick<Booking, 'salonId' | 'serviceId' | 'staffId' | 'scheduledAt'> & {
     acknowledgeDemoOffline?: boolean
   },
 ): Promise<Booking> {
   return request<Booking>('/api/bookings', {
     method: 'POST',
-    body: JSON.stringify(booking),
+    body: JSON.stringify({ ...booking, paymentMode: 'offline' }),
   })
-}
-
-export interface RazorpayOrder {
-  orderId: string
-  amount: number
-  currency: string
-  keyId: string
-  businessName: string
-  serviceName: string
-  customerName: string
-  customerEmail: string
-  customerPhone: string
 }
 
 export interface RazorpayPaymentResponse {
@@ -162,19 +150,19 @@ export interface RazorpayPaymentResponse {
   razorpay_signature: string
 }
 
-export function createRazorpayOrder(
-  booking: Pick<Booking, 'salonId' | 'serviceId' | 'staffId' | 'scheduledAt'> & {
-    acknowledgeDemoPayment?: boolean
-  },
-): Promise<RazorpayOrder> {
-  return request<RazorpayOrder>('/api/payments/razorpay/order', {
+export function loadVendorSubscription(): Promise<VendorSubscriptionCatalog> {
+  return request<VendorSubscriptionCatalog>('/api/vendor/subscription')
+}
+
+export function createProviderSubscriptionOrder(planId: string): Promise<ProviderSubscriptionOrder> {
+  return request<ProviderSubscriptionOrder>('/api/vendor/subscription/order', {
     method: 'POST',
-    body: JSON.stringify(booking),
+    body: JSON.stringify({ planId }),
   })
 }
 
-export function verifyRazorpayPayment(payment: RazorpayPaymentResponse): Promise<Booking> {
-  return request<Booking>('/api/payments/razorpay/verify', {
+export function verifyProviderSubscriptionPayment(payment: RazorpayPaymentResponse): Promise<VendorSubscriptionCatalog['subscription']> {
+  return request<VendorSubscriptionCatalog['subscription']>('/api/payments/razorpay/verify', {
     method: 'POST',
     body: JSON.stringify(payment),
   })
